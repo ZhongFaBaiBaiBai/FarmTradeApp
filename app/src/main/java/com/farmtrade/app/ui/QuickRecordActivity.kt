@@ -53,10 +53,10 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     }
 
     /** 自动生成的记录，初始流程（拍照/语音）完成后赋值 */
-    private lateinit var __pendingRecord: Record
+    private lateinit var _pendingRecord: Record
 
     /** 今日上一条记录，用于沿用 */
-    private var __carryOverRecord: Record? = null
+    private var _carryOverRecord: Record? = null
 
     /** 初始拍照识别的总重（用于"恢复沿用"时还原总重） */
     private var originalGrossWeight = 0.0
