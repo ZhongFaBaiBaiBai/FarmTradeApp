@@ -53,10 +53,10 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     }
 
     /** 自动生成的记录，初始流程（拍照/语音）完成后赋值 */
-    private lateinit var pendingRecord: Record
+    private lateinit var __pendingRecord: Record
 
     /** 今日上一条记录，用于沿用 */
-    private var carryOverRecord: Record? = null
+    private var __carryOverRecord: Record? = null
 
     /** 初始拍照识别的总重（用于"恢复沿用"时还原总重） */
     private var originalGrossWeight = 0.0
@@ -95,8 +95,8 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
             if (granted) {
                 launchCamera()
             } else {
-                toast("需要相机权限")
-                if (cameraForInitial && !this::pendingRecord.isInitialized) finish()
+                showToast("需要相机权限")
+                if (cameraForInitial && !this::_pendingRecord.isInitialized) finish()
             }
         }
 
@@ -105,8 +105,8 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
             if (granted) {
                 speechInput.startFlow()
             } else {
-                toast("需要麦克风权限")
-                if (!this::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()
+                showToast("需要麦克风权限")
+                if (!this::_pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()
             }
         }
 
@@ -116,8 +116,8 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
             if (success && uri != null) {
                 runOcr(uri)
             } else {
-                toast("未拍摄照片")
-                if (cameraForInitial && !this::pendingRecord.isInitialized) finish()
+                showToast("未拍摄照片")
+                if (cameraForInitial && !this::_pendingRecord.isInitialized) finish()
             }
         }
 
@@ -138,32 +138,32 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
         override fun onRecognized(text: String?) {
             if (text.isNullOrEmpty()) {
-                toast("未识别到语音内容")
+                showToast("未识别到语音内容")
                 handleRecognitionFailure()
                 return
             }
             // 行内修改按目标字段解析（用户可能只说数值不带关键词）；
             // 初始语音流程提示的是"请说出总重"，目标也按总重处理
             val parsed = VoiceParser.parseForField(text, pendingVoiceField?.name ?: "GROSS")
-            toast("语音识别：${parsed.convertedText}")
+            showToast("语音识别：${parsed.convertedText}")
             val field = pendingVoiceField
             if (field != null) {
                 // 行内语音修改：只回填目标字段
                 applyVoiceField(field, parsed)
                 pendingVoiceField = null
-                recalcAndRender()
-            } else if (!this@QuickRecordActivity::pendingRecord.isInitialized) {
+                doRecalcAndRender()
+            } else if (!this@QuickRecordActivity::_pendingRecord.isInitialized) {
                 // 初始语音流程
                 assembleRecord(grossFromInput = 0.0, voiceResult = parsed)
             } else {
                 // 兜底：合并到已有记录
-                pendingRecord = VoiceParser.applyToRecord(pendingRecord, parsed)
-                recalcAndRender()
+                _pendingRecord = VoiceParser.applyToRecord(_pendingRecord, parsed)
+                doRecalcAndRender()
             }
         }
 
         override fun onError(message: String) {
-            toast(message)
+            showToast(message)
             handleRecognitionFailure()
         }
 
@@ -224,15 +224,15 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
     private fun assembleRecord(grossFromInput: Double, voiceResult: VoiceParser.ParseResult?) {
         val today = dateFormat.format(Date())
-        carryOverRecord = dbHelper.getTodayLastRecord(today)
+        _carryOverRecord = dbHelper.getTodayLastRecord(today)
 
         val r = Record()
         r.dateTime = dateTimeFormat.format(Date())
         r.source = if (mode == EXTRA_MODE_VOICE) Record.SOURCE_VOICE else Record.SOURCE_PHOTO
-        r.isCarryOver = carryOverRecord != null
+        r.isCarryOver = _carryOverRecord != null
 
         // 沿用今日上一条记录（direction / type / measure / tare / price / unitName）
-        carryOverRecord?.let {
+        _carryOverRecord?.let {
             r.direction = it.direction
             r.type = it.type
             r.vehicleWeight = it.vehicleWeight
@@ -267,7 +267,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         r.totalAmount = r.calculateTotalAmount()
 
         originalGrossWeight = r.grossWeight
-        pendingRecord = r
+        _pendingRecord = r
 
         renderRecord()
         showCarryOverBanner()
@@ -277,31 +277,31 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         if (cameraForInitial) {
             cameraForInitial = false
             assembleRecord(grossFromInput = value, voiceResult = null)
-            toast("识别到总重：${Record.formatNumber(value)}")
+            showToast("识别到总重：${Record.formatNumber(value)}")
         } else {
             when (cameraTarget) {
-                EditField.GROSS -> pendingRecord.grossWeight = value
-                EditField.TARE -> pendingRecord.vehicleWeight = value
-                EditField.PRICE -> pendingRecord.unitPrice = value
+                EditField.GROSS -> _pendingRecord.grossWeight = value
+                EditField.TARE -> _pendingRecord.vehicleWeight = value
+                EditField.PRICE -> _pendingRecord.unitPrice = value
                 else -> {}
             }
-            recalcAndRender()
-            toast("识别到${fieldLabel(cameraTarget)}：${Record.formatNumber(value)}")
+            doRecalcAndRender()
+            showToast("识别到${fieldLabel(cameraTarget)}：${Record.formatNumber(value)}")
         }
     }
 
     // ==================== 渲染 ====================
 
-    private fun recalcAndRender() {
-        if (!this::pendingRecord.isInitialized) return
-        pendingRecord.netWeight = pendingRecord.calculateNetWeight()
-        pendingRecord.totalAmount = pendingRecord.calculateTotalAmount()
+    private fun doRecalcAndRender() {
+        if (!this::_pendingRecord.isInitialized) return
+        _pendingRecord.netWeight = _pendingRecord.calculateNetWeight()
+        _pendingRecord.totalAmount = _pendingRecord.calculateTotalAmount()
         renderRecord()
     }
 
     private fun renderRecord() {
-        if (!this::pendingRecord.isInitialized) return
-        val r = pendingRecord
+        if (!this::_pendingRecord.isInitialized) return
+        val r = _pendingRecord
         val unit = r.unitName
         val priceUnit = when (r.measureMode) {
             Record.MODE_WEIGHT_KG -> "斤"
@@ -341,7 +341,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
             blueBg, blueFg
         )
 
-        val co = carryOverRecord
+        val co = _carryOverRecord
         // 方向 沿用/已改
         setBadge(
             binding.badgeDirectionSource,
@@ -384,7 +384,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         carried != null && current == carried
 
     private fun showCarryOverBanner() {
-        val co = carryOverRecord
+        val co = _carryOverRecord
         binding.tvCarryOverInfo.text = if (co != null) {
             "已沿用今日上一条记录：车重 ${Record.formatNumber(co.vehicleWeight)}${co.unitName} | 单价 ${Record.formatNumber(co.unitPrice)}元"
         } else {
@@ -404,12 +404,12 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     // ==================== QuickRecordEditDialogs.Host 实现 ====================
 
     override val pendingRecord: Record
-        get() = this@QuickRecordActivity.pendingRecord
+        get() = this@QuickRecordActivity._pendingRecord
     override val carryOverRecord: Record?
-        get() = this@QuickRecordActivity.carryOverRecord
+        get() = this@QuickRecordActivity._carryOverRecord
     override fun getAllTypes() = dbHelper.getAllTypes()
-    override fun recalcAndRender() = this@QuickRecordActivity.recalcAndRender()
-    override fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    override fun recalcAndRender() = doRecalcAndRender()
+    override fun toast(msg: String) = showToast(msg)
     override fun startVoiceEditForType() { voiceEditFor(EditField.TYPE) }
     override fun activity(): AppCompatActivity = this
 
@@ -417,8 +417,8 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
     /** 通用文本编辑对话框：用于日期时间 / 总重 / 车重 / 单价 */
     private fun openInlineEdit(field: EditField) {
-        if (!this::pendingRecord.isInitialized) {
-            toast("记录尚未生成")
+        if (!this::_pendingRecord.isInitialized) {
+            showToast("记录尚未生成")
             return
         }
         val dv = DialogInlineEditBinding.inflate(layoutInflater)
@@ -445,15 +445,15 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         }
         dv.btnRestore.setOnClickListener {
             restoreField(field)
-            recalcAndRender()
+            doRecalcAndRender()
             dialog.dismiss()
-            toast("已恢复沿用")
+            showToast("已恢复沿用")
         }
         dv.btnCancel.setOnClickListener { dialog.dismiss() }
         dv.btnConfirm.setOnClickListener {
             val v = dv.etInput.text.toString().trim()
             applyFieldInput(field, v)
-            recalcAndRender()
+            doRecalcAndRender()
             dialog.dismiss()
         }
         dialog.show()
@@ -468,11 +468,11 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     }
 
     private fun fieldCurrentValue(field: EditField): String = when (field) {
-        EditField.GROSS -> Record.formatNumber(pendingRecord.grossWeight)
-        EditField.TARE -> Record.formatNumber(pendingRecord.vehicleWeight)
-        EditField.PRICE -> Record.formatNumber(pendingRecord.unitPrice)
-        EditField.DATETIME -> pendingRecord.dateTime
-        EditField.TYPE -> pendingRecord.type
+        EditField.GROSS -> Record.formatNumber(_pendingRecord.grossWeight)
+        EditField.TARE -> Record.formatNumber(_pendingRecord.vehicleWeight)
+        EditField.PRICE -> Record.formatNumber(_pendingRecord.unitPrice)
+        EditField.DATETIME -> _pendingRecord.dateTime
+        EditField.TYPE -> _pendingRecord.type
     }
 
     private fun fieldInputType(field: EditField): Int = when (field) {
@@ -481,8 +481,8 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     }
 
     private fun fieldHint(field: EditField): String = when (field) {
-        EditField.GROSS -> "输入总重（${pendingRecord.unitName}），可拍照或语音识别"
-        EditField.TARE -> "输入车重（${pendingRecord.unitName}），可拍照或语音识别"
+        EditField.GROSS -> "输入总重（${_pendingRecord.unitName}），可拍照或语音识别"
+        EditField.TARE -> "输入车重（${_pendingRecord.unitName}），可拍照或语音识别"
         EditField.PRICE -> "输入单价（元），可语音说"
         EditField.DATETIME -> "格式：yyyy-MM-dd HH:mm（如 2026-09-01 10:30）"
         EditField.TYPE -> "输入类型名称"
@@ -490,22 +490,22 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
     private fun applyFieldInput(field: EditField, value: String) {
         when (field) {
-            EditField.GROSS -> pendingRecord.grossWeight = value.toDoubleOrNull() ?: 0.0
-            EditField.TARE -> pendingRecord.vehicleWeight = value.toDoubleOrNull() ?: 0.0
-            EditField.PRICE -> pendingRecord.unitPrice = value.toDoubleOrNull() ?: 0.0
-            EditField.DATETIME -> if (value.isNotBlank()) pendingRecord.dateTime = value
-            EditField.TYPE -> if (value.isNotBlank()) pendingRecord.type = value
+            EditField.GROSS -> _pendingRecord.grossWeight = value.toDoubleOrNull() ?: 0.0
+            EditField.TARE -> _pendingRecord.vehicleWeight = value.toDoubleOrNull() ?: 0.0
+            EditField.PRICE -> _pendingRecord.unitPrice = value.toDoubleOrNull() ?: 0.0
+            EditField.DATETIME -> if (value.isNotBlank()) _pendingRecord.dateTime = value
+            EditField.TYPE -> if (value.isNotBlank()) _pendingRecord.type = value
         }
     }
 
     private fun restoreField(field: EditField) {
-        val co = carryOverRecord
+        val co = _carryOverRecord
         when (field) {
-            EditField.GROSS -> pendingRecord.grossWeight = originalGrossWeight
-            EditField.TARE -> pendingRecord.vehicleWeight = co?.vehicleWeight ?: 0.0
-            EditField.PRICE -> pendingRecord.unitPrice = co?.unitPrice ?: 0.0
-            EditField.DATETIME -> pendingRecord.dateTime = dateTimeFormat.format(Date())
-            EditField.TYPE -> co?.type?.let { pendingRecord.type = it }
+            EditField.GROSS -> _pendingRecord.grossWeight = originalGrossWeight
+            EditField.TARE -> _pendingRecord.vehicleWeight = co?.vehicleWeight ?: 0.0
+            EditField.PRICE -> _pendingRecord.unitPrice = co?.unitPrice ?: 0.0
+            EditField.DATETIME -> _pendingRecord.dateTime = dateTimeFormat.format(Date())
+            EditField.TYPE -> co?.type?.let { _pendingRecord.type = it }
         }
     }
 
@@ -518,7 +518,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 cameraTarget = field
                 if (hasCameraPermission()) launchCamera() else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
-            else -> toast("该字段不支持拍照识别")
+            else -> showToast("该字段不支持拍照识别")
         }
     }
 
@@ -529,10 +529,10 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
     private fun applyVoiceField(field: EditField, r: VoiceParser.ParseResult) {
         when (field) {
-            EditField.GROSS -> r.grossWeight?.let { pendingRecord.grossWeight = it }
-            EditField.TARE -> r.vehicleWeight?.let { pendingRecord.vehicleWeight = it }
-            EditField.PRICE -> r.unitPrice?.let { pendingRecord.unitPrice = it }
-            EditField.TYPE -> r.type?.let { pendingRecord.type = it }
+            EditField.GROSS -> r.grossWeight?.let { _pendingRecord.grossWeight = it }
+            EditField.TARE -> r.vehicleWeight?.let { _pendingRecord.vehicleWeight = it }
+            EditField.PRICE -> r.unitPrice?.let { _pendingRecord.unitPrice = it }
+            EditField.TYPE -> r.type?.let { _pendingRecord.type = it }
             EditField.DATETIME -> {}
         }
     }
@@ -542,14 +542,14 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private fun launchCamera() {
         cameraImageUri = OcrHelper.createImageUri(this)
         if (cameraImageUri == null) {
-            toast("无法创建图片文件")
+            showToast("无法创建图片文件")
             if (cameraForInitial) finish()
             return
         }
         try {
             takePictureLauncher.launch(cameraImageUri!!)
         } catch (e: Exception) {
-            toast("无法启动相机")
+            showToast("无法启动相机")
             if (cameraForInitial) finish()
         }
     }
@@ -563,12 +563,12 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 if (value != null && value > 0) {
                     handleOcrResult(value)
                 } else {
-                    toast("未识别到有效数字")
-                    if (cameraForInitial && !this@QuickRecordActivity::pendingRecord.isInitialized) finish()
+                    showToast("未识别到有效数字")
+                    if (cameraForInitial && !this@QuickRecordActivity::_pendingRecord.isInitialized) finish()
                 }
             } else {
-                toast("OCR 识别失败")
-                if (cameraForInitial && !this@QuickRecordActivity::pendingRecord.isInitialized) finish()
+                showToast("OCR 识别失败")
+                if (cameraForInitial && !this@QuickRecordActivity::_pendingRecord.isInitialized) finish()
             }
         }
     }
@@ -577,7 +577,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
      * 识别失败时的处理：如果是初始流程就结束页面。
      */
     private fun handleRecognitionFailure() {
-        if (!this::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) {
+        if (!this::_pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) {
             finish()
         }
     }
@@ -585,25 +585,25 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     // ==================== 保存 / 跳转 ====================
 
     private fun goToFullEdit() {
-        if (!this::pendingRecord.isInitialized) {
-            toast("记录尚未生成")
+        if (!this::_pendingRecord.isInitialized) {
+            showToast("记录尚未生成")
             return
         }
         val intent = Intent(this, AddRecordActivity::class.java).apply {
-            putExtra(AddRecordActivity.EXTRA_RECORD, pendingRecord)
+            putExtra(AddRecordActivity.EXTRA_RECORD, _pendingRecord)
         }
         editRecordLauncher.launch(intent)
     }
 
     private fun confirmSave() {
-        if (!this::pendingRecord.isInitialized) {
-            toast("记录尚未生成")
+        if (!this::_pendingRecord.isInitialized) {
+            showToast("记录尚未生成")
             return
         }
-        pendingRecord.netWeight = pendingRecord.calculateNetWeight()
-        pendingRecord.totalAmount = pendingRecord.calculateTotalAmount()
-        dbHelper.insertRecord(pendingRecord)
-        toast("保存成功")
+        _pendingRecord.netWeight = _pendingRecord.calculateNetWeight()
+        _pendingRecord.totalAmount = _pendingRecord.calculateTotalAmount()
+        dbHelper.insertRecord(_pendingRecord)
+        showToast("保存成功")
         setResult(RESULT_OK)
         finish()
     }
@@ -616,7 +616,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private fun hasAudioPermission() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    private fun showToast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
     override fun onDestroy() {
         super.onDestroy()
