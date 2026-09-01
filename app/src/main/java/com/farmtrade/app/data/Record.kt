@@ -10,9 +10,9 @@ import kotlinx.parcelize.Parcelize
  * @param direction 买卖方向: "买入" 或 "卖出"
  * @param type 类型: 小麦/玉米/化肥/农药/柴油/大豆/水稻/自定义...
  * @param measureMode 计量方式: "WEIGHT_KG"(按重量-公斤) / "WEIGHT_JIN"(按重量-斤) / "QUANTITY"(按数量)
- * @param grossWeight 毛重 (重量模式时使用)
+ * @param grossWeight 总重 (重量模式时使用)
  * @param vehicleWeight 车重/皮重 (重量模式时使用)
- * @param netWeight 净重 (自动计算: 毛重 - 车重)
+ * @param netWeight 净重 (自动计算: 总重 - 车重)
  * @param quantity 数量 (数量模式时使用)
  * @param unitName 单位名称 (如: 公斤/斤/桶/袋/升)
  * @param unitPrice 单价
@@ -41,7 +41,7 @@ data class Record(
 ) : Parcelable {
 
     /**
-     * 计算净重 = 毛重 - 车重
+     * 计算净重 = 总重 - 车重
      */
     fun calculateNetWeight(): Double {
         return if (measureMode == "QUANTITY") {
@@ -74,7 +74,7 @@ data class Record(
             "${formatNumber(quantity)} ${unitName}"
         } else {
             val net = calculateNetWeight()
-            "毛重${formatNumber(grossWeight)}${unitName} - 车重${formatNumber(vehicleWeight)}${unitName} = 净重${formatNumber(net)}${unitName}"
+            "总重${formatNumber(grossWeight)}${unitName} - 车重${formatNumber(vehicleWeight)}${unitName} = 净重${formatNumber(net)}${unitName}"
         }
     }
 

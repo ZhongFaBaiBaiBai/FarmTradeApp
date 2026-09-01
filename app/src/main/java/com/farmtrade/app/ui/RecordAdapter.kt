@@ -118,10 +118,10 @@ class RecordAdapter(
             b.tvQuantity.text = Record.formatNumber(record.quantity)
             b.tvUnitName.text = " ${record.unitName}"
         } else {
-            // 重量模式：毛重:X | 车重:Y | 净重:Z unitName
+            // 重量模式：总重:X | 车重:Y | 净重:Z unitName
             b.layoutWeight.visibility = View.VISIBLE
             b.layoutQuantity.visibility = View.GONE
-            b.tvGrossWeight.text = "毛重:${Record.formatNumber(record.grossWeight)}"
+            b.tvGrossWeight.text = "总重:${Record.formatNumber(record.grossWeight)}"
             b.tvTareWeight.text = withCarryOver(
                 "车重:${Record.formatNumber(record.vehicleWeight)}",
                 record.isCarryOver,

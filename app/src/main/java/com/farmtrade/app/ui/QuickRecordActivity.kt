@@ -37,7 +37,7 @@ import java.util.Locale
  * 快速记录界面：通过拍照或语音自动生成一条记录，并沿用今日上一条记录的车重/单价等。
  *
  * - 接收 [RecordListActivity.EXTRA_RECORD_MODE] = "PHOTO" 或 "VOICE"
- * - PHOTO：立即拍照 -> OCR 读取数字作为毛重
+ * - PHOTO：立即拍照 -> OCR 读取数字作为总重
  * - VOICE：立即语音识别 -> [VoiceParser.parse] 解析各字段
  * - 读取 [DatabaseHelper.getTodayLastRecord] 进行沿用
  * - 展示自动生成记录卡片，每个字段带来源徽标，可点击行内编辑
@@ -62,7 +62,7 @@ class QuickRecordActivity : AppCompatActivity() {
     /** 今日上一条记录，用于沿用 */
     private var carryOverRecord: Record? = null
 
-    /** 初始拍照识别的毛重（用于"恢复沿用"时还原毛重） */
+    /** 初始拍照识别的总重（用于"恢复沿用"时还原总重） */
     private var originalGrossWeight = 0.0
 
     private var cameraImageUri: Uri? = null
@@ -204,7 +204,7 @@ class QuickRecordActivity : AppCompatActivity() {
             voiceResult.grossWeight?.let { r.grossWeight = it }
         }
 
-        // 拍照识别的毛重
+        // 拍照识别的总重
         if (r.grossWeight <= 0 && grossFromInput > 0) {
             r.grossWeight = grossFromInput
         }
@@ -223,7 +223,7 @@ class QuickRecordActivity : AppCompatActivity() {
         if (cameraForInitial) {
             cameraForInitial = false
             assembleRecord(grossFromInput = value, voiceResult = null)
-            toast("识别到毛重：${Record.formatNumber(value)}")
+            toast("识别到总重：${Record.formatNumber(value)}")
         } else {
             when (cameraTarget) {
                 EditField.GROSS -> pendingRecord.grossWeight = value
@@ -265,7 +265,7 @@ class QuickRecordActivity : AppCompatActivity() {
         binding.tvUnitPrice.text = "${Record.formatNumber(r.unitPrice)} 元/$priceUnit"
         binding.tvTotalAmount.text = "￥${Record.formatMoney(r.totalAmount)}"
 
-        // 毛重来源：拍照 / 语音
+        // 总重来源：拍照 / 语音
         setBadge(
             binding.badgeGrossSource,
             if (r.source == Record.SOURCE_VOICE) "🎤 语音" else "📷 拍照",
@@ -351,7 +351,7 @@ class QuickRecordActivity : AppCompatActivity() {
     }
 
     private fun fieldLabel(field: EditField): String = when (field) {
-        EditField.GROSS -> "毛重"
+        EditField.GROSS -> "总重"
         EditField.TARE -> "车重"
         EditField.PRICE -> "单价"
         EditField.TYPE -> "类型"
@@ -372,7 +372,7 @@ class QuickRecordActivity : AppCompatActivity() {
     }
 
     private fun fieldHint(field: EditField): String = when (field) {
-        EditField.GROSS -> "输入毛重（${pendingRecord.unitName}），可拍照识别"
+        EditField.GROSS -> "输入总重（${pendingRecord.unitName}），可拍照识别"
         EditField.TARE -> "输入车重（${pendingRecord.unitName}），可拍照识别"
         EditField.PRICE -> "输入单价（元）"
         EditField.TYPE -> "输入类型名称"

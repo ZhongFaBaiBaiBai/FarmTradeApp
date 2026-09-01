@@ -77,7 +77,7 @@ object OcrHelper {
      * 检查文本是否包含重量相关关键词
      */
     fun containsWeightKeywords(text: String): Boolean {
-        val keywords = listOf("kg", "公斤", "斤", "吨", "毛重", "净重", "皮重", "车重")
+        val keywords = listOf("kg", "公斤", "斤", "吨", "总重", "毛重", "净重", "皮重", "车重")
         return keywords.any { text.contains(it, ignoreCase = true) }
     }
 }

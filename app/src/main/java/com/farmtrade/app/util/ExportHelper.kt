@@ -23,7 +23,7 @@ object ExportHelper {
 
     /** 导出表格的列标题，顺序固定 */
     private val HEADERS = arrayOf(
-        "日期时间", "买卖方向", "类型", "计量方式", "毛重", "车重",
+        "日期时间", "买卖方向", "类型", "计量方式", "总重", "车重",
         "净重", "数量", "单位", "单价", "总额", "来源"
     )
 
@@ -122,7 +122,7 @@ object ExportHelper {
                 PdfColumn("方向", 30f) { it.direction },
                 PdfColumn("类型", 50f) { it.type },
                 PdfColumn("计量", 46f) { measureModeText(it.measureMode) },
-                PdfColumn("毛重", 38f) { Record.formatNumber(it.grossWeight) },
+                PdfColumn("总重", 38f) { Record.formatNumber(it.grossWeight) },
                 PdfColumn("车重", 38f) { Record.formatNumber(it.vehicleWeight) },
                 PdfColumn("净重", 42f) { Record.formatNumber(it.calculateNetWeight()) },
                 PdfColumn("数量", 38f) { Record.formatNumber(it.quantity) },

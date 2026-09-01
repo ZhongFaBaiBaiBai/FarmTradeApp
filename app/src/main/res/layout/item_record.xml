@@ -89,7 +89,7 @@
                 android:id="@+id/tvGrossWeight"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="毛重: 500"
+                android:text="总重: 500"
                 android:textColor="#555555"
                 android:textSize="16sp" />
 

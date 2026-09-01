@@ -43,7 +43,7 @@ import java.util.Locale
  * - 买卖方向 买入/卖出 切换
  * - 类型 chips（来自 [DatabaseHelper.getAllTypes]） + "+ 自定义"
  * - 计量方式：按重量(公斤) / 按重量(斤) / 按数量
- * - 重量区：毛重 / 车重（可拍照 OCR 识别） / 净重自动计算
+ * - 重量区：总重 / 车重（可拍照 OCR 识别） / 净重自动计算
  * - 单价 + 合计金额自动预览
  * - 顶部紫色语音输入条：语音识别后自动填写
  * - 保存：新增或更新记录
@@ -60,7 +60,7 @@ class AddRecordActivity : AppCompatActivity() {
     private var selectedType = ""
     private var measureMode = Record.MODE_WEIGHT_KG
 
-    /** 0 = 毛重, 1 = 车重 —— 标记当前拍照识别的目标输入框 */
+    /** 0 = 总重, 1 = 车重 —— 标记当前拍照识别的目标输入框 */
     private var currentPhotoTarget = 0
     private var cameraImageUri: Uri? = null
 
@@ -158,7 +158,7 @@ class AddRecordActivity : AppCompatActivity() {
             }
         })
 
-        // 6. 拍照识别（毛重 / 车重）
+        // 6. 拍照识别（总重 / 车重）
         binding.btnPhotoGross.setOnClickListener { requestCameraFor(0) }
         binding.btnPhotoTare.setOnClickListener { requestCameraFor(1) }
 
@@ -584,7 +584,7 @@ class AddRecordActivity : AppCompatActivity() {
             }
         } else {
             if (gross <= 0) {
-                toast("请输入毛重")
+                toast("请输入总重")
                 return
             }
         }
