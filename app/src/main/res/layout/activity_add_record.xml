@@ -73,6 +73,7 @@
                     app:tint="#7b1fa2" />
 
                 <TextView
+                    android:id="@+id/tvVoiceHint"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"

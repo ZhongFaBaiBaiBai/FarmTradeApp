@@ -41,8 +41,6 @@ dependencies {
     implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
     // OCR文字识别（Google ML Kit）
     implementation 'com.google.mlkit:text-recognition-chinese:16.0.0'
-    // 语音识别
-    implementation 'com.google.android.material:material:1.11.0'
     // CSV导出（无需第三方库，使用标准库）
     // 图片加载
     implementation 'com.github.bumptech.glide:glide:4.16.0'
@@ -51,4 +49,6 @@ dependencies {
     // Room数据库
     implementation 'androidx.room:room-runtime:2.6.1'
     implementation 'androidx.room:room-ktx:2.6.1'
+    // Vosk 本地离线语音识别（中文支持好，Android 集成成熟）
+    implementation 'org.vosk:vosk-android:0.3.45'
 }

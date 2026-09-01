@@ -1,6 +1,7 @@
 package com.farmtrade.app.ui
 
 import android.Manifest
+import android.app.ProgressDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -9,7 +10,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.speech.RecognizerIntent
 import android.text.InputType
 import android.widget.TextView
 import android.widget.Toast
@@ -22,8 +22,10 @@ import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.ActivityQuickRecordBinding
 import com.farmtrade.app.databinding.DialogInlineEditBinding
+import com.farmtrade.app.util.AudioRecorder
 import com.farmtrade.app.util.OcrHelper
 import com.farmtrade.app.util.VoiceParser
+import com.farmtrade.app.util.VoskSpeechHelper
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import java.io.File
@@ -99,7 +101,7 @@ class QuickRecordActivity : AppCompatActivity() {
     private val audioPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
-                startSpeech()
+                onVoicePermissionGranted()
             } else {
                 toast("需要麦克风权限")
                 if (!this::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()
@@ -117,42 +119,12 @@ class QuickRecordActivity : AppCompatActivity() {
             }
         }
 
-    private val speechLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode != RESULT_OK) {
-                if (!this::pendingRecord.isInitialized) {
-                    toast("已取消语音输入")
-                    finish()
-                }
-                return@registerForActivityResult
-            }
-            val text = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-            if (text.isNullOrEmpty()) {
-                toast("未识别到语音内容")
-                if (!this::pendingRecord.isInitialized) finish()
-                return@registerForActivityResult
-            }
-            val parsed = VoiceParser.parse(text)
-            val field = pendingVoiceField
-            if (field != null) {
-                // 行内语音修改：只回填目标字段
-                applyVoiceField(field, parsed)
-                pendingVoiceField = null
-                recalcAndRender()
-                toast("已用语音修改${fieldLabel(field)}")
-            } else if (!this::pendingRecord.isInitialized) {
-                // 初始语音流程
-                assembleRecord(grossFromInput = 0.0, voiceResult = parsed)
-                toast("语音识别：$text")
-            } else {
-                // 兜底：将识别结果合并到已有记录（applyToRecord 返回新实例，需重新赋值）
-                pendingRecord = VoiceParser.applyToRecord(pendingRecord, parsed)
-                recalcAndRender()
-                toast("语音识别：$text")
-            }
-        }
+    // ===== 本地语音识别 =====
+    private val voskHelper by lazy { VoskSpeechHelper(this) }
+    private val audioRecorder by lazy { AudioRecorder() }
+    private var isRecording = false
+    /** 行内语音修改时，解析结果要回填的字段；为空表示处于初始语音流程 */
+    private var pendingVoiceField: EditField? = null
 
     /** 跳转 AddRecordActivity "全部修改"，并透传保存结果给 RecordListActivity */
     private val editRecordLauncher =
@@ -199,7 +171,8 @@ class QuickRecordActivity : AppCompatActivity() {
     }
 
     private fun startVoiceFlow() {
-        if (hasAudioPermission()) startSpeech() else audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        pendingVoiceField = null
+        if (hasAudioPermission()) onVoicePermissionGranted() else audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun assembleRecord(grossFromInput: Double, voiceResult: VoiceParser.ParseResult?) {
@@ -444,7 +417,7 @@ class QuickRecordActivity : AppCompatActivity() {
 
     private fun voiceEditFor(field: EditField) {
         pendingVoiceField = field
-        if (hasAudioPermission()) startSpeech() else audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        if (hasAudioPermission()) startLocalVoiceRecognition() else audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun applyVoiceField(field: EditField, r: VoiceParser.ParseResult) {
@@ -519,19 +492,132 @@ class QuickRecordActivity : AppCompatActivity() {
         }
     }
 
-    // ==================== 语音 ====================
+    // ==================== 语音（本地 Vosk 离线识别） ====================
 
-    private fun startSpeech() {
-        try {
-            val label = fieldLabel(pendingVoiceField ?: EditField.GROSS)
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "请说出${label}，如：毛重2500公斤")
+    /**
+     * 麦克风权限获得后调用，根据当前场景开始语音识别。
+     */
+    private fun onVoicePermissionGranted() {
+        startLocalVoiceRecognition()
+    }
+
+    /**
+     * 开始本地语音识别流程：检查模型 → 下载或开始录音。
+     * 录音完成后根据 [pendingVoiceField] 判断是初始录入还是行内修改。
+     */
+    private fun startLocalVoiceRecognition() {
+        if (voskHelper.isModelReady()) {
+            startRecordingAndRecognize()
+        } else {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("下载语音模型")
+                .setMessage("首次使用语音输入需要下载离线识别模型（约 40MB），下载后无需联网即可使用。是否现在下载？")
+                .setPositiveButton("下载") { _, _ -> downloadModelAndRecord() }
+                .setNegativeButton("取消") { _, _ ->
+                    if (!this::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()
+                }
+                .show()
+        }
+    }
+
+    private fun downloadModelAndRecord() {
+        val progressDialog = ProgressDialog(this).apply {
+            setMessage("正在下载语音模型...")
+            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
+            setCancelable(false)
+            max = 100
+            show()
+        }
+
+        lifecycleScope.launch {
+            val success = voskHelper.downloadModel { progress ->
+                progressDialog.progress = progress
             }
-            speechLauncher.launch(intent)
-        } catch (e: Exception) {
-            toast("未找到语音识别应用")
+            progressDialog.dismiss()
+            if (success) {
+                toast("模型下载完成")
+                startRecordingAndRecognize()
+            } else {
+                toast("模型下载失败")
+                if (!this@QuickRecordActivity::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()
+            }
+        }
+    }
+
+    private fun startRecordingAndRecognize() {
+        val outputFile = File(cacheDir, "quick_voice_${System.currentTimeMillis()}.wav")
+        audioRecorder.startRecording(outputFile)
+        isRecording = true
+
+        // 显示录音中对话框
+        val label = fieldLabel(pendingVoiceField ?: EditField.GROSS)
+        MaterialAlertDialogBuilder(this)
+            .setTitle("🎤 正在录音")
+            .setMessage("请说出${label}\n\n说完后点击「完成」按钮")
+            .setCancelable(false)
+            .setPositiveButton("完成") { _, _ ->
+                stopAndRecognize(outputFile)
+            }
+            .show()
+    }
+
+    private fun stopAndRecognize(wavFile: File) {
+        lifecycleScope.launch {
+            audioRecorder.stopRecording()
+            isRecording = false
+
+            val progressDialog = ProgressDialog(this@QuickRecordActivity).apply {
+                setMessage("正在识别...")
+                setCancelable(false)
+                show()
+            }
+
+            // 加载模型
+            val modelLoaded = voskHelper.loadModel()
+            if (!modelLoaded) {
+                progressDialog.dismiss()
+                toast("语音模型加载失败")
+                handleRecognitionFailure()
+                return@launch
+            }
+
+            // 识别
+            val text = voskHelper.transcribe(wavFile)
+            progressDialog.dismiss()
+            wavFile.delete()
+
+            if (text.isNullOrEmpty()) {
+                toast("未识别到语音内容")
+                handleRecognitionFailure()
+                return@launch
+            }
+
+            toast("语音识别：$text")
+            val parsed = VoiceParser.parse(text)
+            val field = pendingVoiceField
+
+            if (field != null) {
+                // 行内语音修改：只回填目标字段
+                applyVoiceField(field, parsed)
+                pendingVoiceField = null
+                recalcAndRender()
+            } else if (!this@QuickRecordActivity::pendingRecord.isInitialized) {
+                // 初始语音流程
+                assembleRecord(grossFromInput = 0.0, voiceResult = parsed)
+            } else {
+                // 兜底：合并到已有记录
+                pendingRecord = VoiceParser.applyToRecord(pendingRecord, parsed)
+                recalcAndRender()
+            }
+        }
+    }
+
+    /**
+     * 识别失败时的处理：如果是初始流程就结束页面。
+     */
+    private fun handleRecognitionFailure() {
+        if (!this::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) {
+            finish()
         }
     }
 
@@ -570,6 +656,12 @@ class QuickRecordActivity : AppCompatActivity() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+    override fun onDestroy() {
+        super.onDestroy()
+        audioRecorder.release()
+        voskHelper.release()
+    }
 
     /** 可行内编辑的字段 */
     private enum class EditField { GROSS, TARE, PRICE, TYPE, DATETIME }
