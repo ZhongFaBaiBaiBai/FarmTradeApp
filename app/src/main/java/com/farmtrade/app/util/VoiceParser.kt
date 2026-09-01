@@ -12,14 +12,14 @@ import com.farmtrade.app.data.Record
 object VoiceParser {
 
     data class ParseResult(
-        val direction: String? = null,
-        val type: String? = null,
-        val measureMode: String? = null,
-        val grossWeight: Double? = null,
-        val vehicleWeight: Double? = null,
-        val quantity: Double? = null,
-        val unitName: String? = null,
-        val unitPrice: Double? = null,
+        var direction: String? = null,
+        var type: String? = null,
+        var measureMode: String? = null,
+        var grossWeight: Double? = null,
+        var vehicleWeight: Double? = null,
+        var quantity: Double? = null,
+        var unitName: String? = null,
+        var unitPrice: Double? = null,
         val parseDetails: MutableList<String> = mutableListOf()
     )
 
