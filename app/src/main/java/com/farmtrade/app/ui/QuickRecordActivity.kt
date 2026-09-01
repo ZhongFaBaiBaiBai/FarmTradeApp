@@ -94,7 +94,7 @@ class QuickRecordActivity : AppCompatActivity() {
     private val audioPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
-                onVoicePermissionGranted()
+                speechInput.startFlow()
             } else {
                 toast("需要麦克风权限")
                 if (!this::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()

@@ -82,9 +82,13 @@ class SpeechInputController(
 
     /** 停止录音并识别，结果通过 [Callbacks.onRecognized] 返回 */
     fun stopAndRecognize() {
-        val file = recorder.stopRecording()
-        recording = false
         activity.lifecycleScope.launch {
+            val file = recorder.stopRecording()
+            recording = false
+            if (file == null) {
+                callbacks.onError("录音失败")
+                return@launch
+            }
             val progressDialog = ProgressDialog(activity).apply {
                 setMessage("正在识别...")
                 setCancelable(false)
@@ -97,7 +101,7 @@ class SpeechInputController(
             }
             val text = vosk.transcribe(file)
             progressDialog.dismiss()
-            file?.delete()
+            file.delete()
             callbacks.onRecognized(text)
         }
     }
