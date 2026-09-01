@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#ffffff"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="24dp"
+    android:paddingBottom="20dp">
+
+    <!-- Label showing field name -->
+    <TextView
+        android:id="@+id/tvFieldLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="编辑: 毛重"
+        android:textColor="#333333"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Large input EditText -->
+    <com.google.android.material.textfield.TextInputLayout
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        app:boxStrokeColor="#2e7d32"
+        app:hintTextColor="#2e7d32">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="numberDecimal"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#333333" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Hint text -->
+    <TextView
+        android:id="@+id/tvHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="输入数字，可拍照识别或语音修改"
+        android:textColor="#aaaaaa"
+        android:textSize="14sp"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Quick action buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="20dp">
+
+        <!-- 重新拍照 (blue) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRetakePhoto"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="📷 重新拍照"
+            android:textColor="#1565c0"
+            android:textSize="14sp"
+            app:strokeColor="#1565c0"
+            android:layout_marginEnd="6dp" />
+
+        <!-- 语音修改 (purple) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnVoiceEdit"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="🎤 语音修改"
+            android:textColor="#7b1fa2"
+            android:textSize="14sp"
+            app:strokeColor="#7b1fa2"
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="6dp" />
+
+        <!-- 恢复沿用 (gray) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRestore"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="↺ 恢复沿用"
+            android:textColor="#888888"
+            android:textSize="14sp"
+            app:strokeColor="#888888"
+            android:layout_marginStart="3dp" />
+    </LinearLayout>
+
+    <!-- Cancel / Confirm buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancel"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:text="取消"
+            android:textColor="#888888"
+            android:textSize="18sp"
+            app:strokeColor="#e8e8e8"
+            android:layout_marginEnd="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnConfirm"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:text="确认"
+            android:textColor="#ffffff"
+            android:textSize="18sp"
+            app:backgroundTint="#2e7d32"
+            app:cornerRadius="10dp"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+
+</LinearLayout>

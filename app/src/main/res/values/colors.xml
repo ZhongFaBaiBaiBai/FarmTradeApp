@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Green palette -->
+    <color name="green_primary">#2e7d32</color>
+    <color name="green_light">#e8f5e9</color>
+    <color name="green_dark">#1b5e20</color>
+
+    <!-- Orange palette -->
+    <color name="orange_primary">#e65100</color>
+    <color name="orange_light">#fff3e0</color>
+
+    <!-- Blue palette -->
+    <color name="blue_primary">#1565c0</color>
+    <color name="blue_light">#e3f2fd</color>
+
+    <!-- Purple palette -->
+    <color name="purple_primary">#7b1fa2</color>
+    <color name="purple_light">#f3e5f5</color>
+
+    <!-- Neutral colors -->
+    <color name="border">#e8e8e8</color>
+    <color name="background">#f0f2f5</color>
+    <color name="text_primary">#333333</color>
+    <color name="text_secondary">#888888</color>
+    <color name="text_hint">#aaaaaa</color>
+    <color name="white">#ffffff</color>
+</resources>

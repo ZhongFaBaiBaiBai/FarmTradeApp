@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">农产品买卖记录</string>
+    <string name="tab_records">记录</string>
+    <string name="tab_charts">图表</string>
+    <string name="tab_summary">汇总</string>
+    <string name="tab_settings">设置</string>
+    <string name="add_record">新增记录</string>
+    <string name="save">保存</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确认</string>
+    <string name="delete">删除</string>
+    <string name="edit">修改</string>
+</resource>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Reusable bottom navigation bar for Farm Trade Record App.
+    4 items: 记录, 图表, 汇总, 设置
+-->
+<com.google.android.material.bottomnavigation.BottomNavigationView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/bottomNavigationView"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#ffffff"
+    app:labelVisibilityMode="labeled"
+    app:itemTextColor="@color/bottom_nav_color"
+    app:itemIconTint="@color/bottom_nav_color"
+    app:itemTextSizeActive="14sp"
+    app:elevation="8dp"
+    app:menu="@menu/bottom_nav_menu" />
