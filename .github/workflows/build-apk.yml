@@ -22,9 +22,11 @@ jobs:
         distribution: 'temurin'
 
     - name: 设置 Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        packages: 'platforms;android-34 build-tools;34.0.0'
+      uses: android-actions/setup-android@v4
+
+    - name: 安装 Android SDK 组件
+      run: |
+        sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
     - name: 安装 Gradle
       run: |
@@ -60,7 +62,7 @@ jobs:
         rm -rf /tmp/vosk-model.zip /tmp/vosk-tmp
 
     - name: 构建 Debug APK
-      run: gradle assembleDebug --no-daemon --stacktrace
+      run: gradle assembleDebug --no-daemon --stacktrace 2>&1 | tail -200
 
     - name: 上传 APK
       uses: actions/upload-artifact@v4
