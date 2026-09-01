@@ -63,23 +63,27 @@ jobs:
 
     - name: 构建 Debug APK
       run: |
+        set +e
         gradle assembleDebug --no-daemon --stacktrace > /tmp/build.log 2>&1
-        echo "=== 构建结果 ==="
-        if grep -q "BUILD SUCCESSFUL" /tmp/build.log; then
+        EXIT_CODE=$?
+        echo "=== 构建结果 (exit code: $EXIT_CODE) ==="
+        if [ $EXIT_CODE -eq 0 ] && grep -q "BUILD SUCCESSFUL" /tmp/build.log; then
           echo "✅ 构建成功"
         else
           echo "❌ 构建失败，以下是错误摘要："
-          grep -n "error:" /tmp/build.log | head -30
-          echo "---"
-          grep -n "^e: " /tmp/build.log | head -30
-          echo "---"
-          grep -n "FAILURE\|Caused by" /tmp/build.log | tail -20
+          echo "===== Kotlin 编译错误 ====="
+          grep -n "^e: " /tmp/build.log | head -40
+          echo "===== 其他错误 ====="
+          grep -n -i "error:" /tmp/build.log | grep -v "^.*: warning:" | head -20
+          echo "===== FAILURE / Caused by ====="
+          grep -n "FAILURE\|Caused by\|Compilation error" /tmp/build.log | tail -10
         fi
-        cat /tmp/build.log > build-full.log
+        cp /tmp/build.log build-full.log
         echo "完整日志已保存到 build-full.log"
+        exit $EXIT_CODE
 
     - name: 上传构建日志（失败时）
-      if: failure()
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: build-log
