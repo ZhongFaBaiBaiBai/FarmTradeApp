@@ -19,15 +19,16 @@
         android:supportsRtl="true">
 
         <activity
-            android:name=".ui.RecordListActivity"
+            android:name=".ui.MainActivity"
             android:exported="true"
-            android:label="买卖记录">
+            android:label="农产品买卖记录">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <activity android:name=".ui.RecordListActivity" android:label="买卖记录" />
         <activity android:name=".ui.AddRecordActivity" android:label="新增记录" />
         <activity android:name=".ui.QuickRecordActivity" android:label="快速记录" />
         <activity android:name=".ui.ChartActivity" android:label="数据图表" />
