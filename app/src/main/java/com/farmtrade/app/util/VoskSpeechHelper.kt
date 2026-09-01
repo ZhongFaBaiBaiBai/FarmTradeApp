@@ -46,7 +46,11 @@ class VoskSpeechHelper(private val context: Context) {
     private var isModelLoaded = false
 
     init {
-        LibVosk.setLogLevel(LogLevel.WARNINGS)
+        try {
+            LibVosk.setLogLevel(LogLevel.WARNINGS)
+        } catch (e: Exception) {
+            // 忽略日志级别设置失败
+        }
     }
 
     /**
@@ -186,30 +190,24 @@ class VoskSpeechHelper(private val context: Context) {
                 // 跳过 WAV 头（44 字节）
                 fis.skip(44)
 
-                // Vosk acceptWaveForm 需要 short[] (16bit PCM)
-                // 每次读取 4096 字节 = 2048 个 short
-                val byteBuffer = ByteArray(4096)
-                val shortBuffer = ShortArray(2048)
+                // Vosk acceptWaveForm 接收 byte[] (16bit PCM 小端序)
+                val buffer = ByteArray(4096)
                 var read: Int
-                while (fis.read(byteBuffer).also { read = it } != -1) {
-                    // 将 byte 转为 short（小端序，16bit PCM）
-                    val numSamples = read / 2
-                    var byteIdx = 0
-                    for (i in 0 until numSamples) {
-                        shortBuffer[i] = ((byteBuffer[byteIdx + 1].toInt() shl 8) or
-                                (byteBuffer[byteIdx].toInt() and 0xFF)).toShort()
-                        byteIdx += 2
-                    }
-                    recognizer.acceptWaveForm(shortBuffer, numSamples)
+                while (fis.read(buffer).also { read = it } != -1) {
+                    recognizer.acceptWaveForm(buffer, read)
                 }
             }
 
             // 获取最终结果
-            val resultJson = recognizer.finalResult()
+            val resultJson = recognizer.finalResult
             val jsonObject = JSONObject(resultJson)
             val text = jsonObject.optString("text", "")
 
-            recognizer.close()
+            try {
+                recognizer.close()
+            } catch (e: Exception) {
+                // 忽略关闭异常
+            }
 
             Log.d(TAG, "识别结果: $text")
             text.trim().takeIf { it.isNotEmpty() }

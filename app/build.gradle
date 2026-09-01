@@ -50,5 +50,5 @@ dependencies {
     implementation 'androidx.room:room-runtime:2.6.1'
     implementation 'androidx.room:room-ktx:2.6.1'
     // Vosk 本地离线语音识别（中文支持好，Android 集成成熟）
-    implementation 'com.alphacephei:vosk-android:0.3.32'
+    implementation 'com.alphacephei:vosk-android:0.3.32+'
 }
