@@ -345,14 +345,6 @@
                             android:textColor="#1565c0"
                             android:textSize="16sp"
                             android:gravity="end" />
-
-                        <TextView
-                            android:id="@+id/badgeGrossSource"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="📷"
-                            android:textSize="14sp"
-                            android:layout_marginStart="8dp" />
                     </LinearLayout>
 
                     <View
