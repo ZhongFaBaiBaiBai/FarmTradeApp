@@ -198,10 +198,10 @@ object VoiceParser {
     )
 
     private val unitMap = mapOf(
-        '十' to 10, '拾' to 10,
-        '百' to 100, '佰' to 100,
-        '千' to 1000, '仟' to 1000,
-        '万' to 10000, '亿' to 100000000
+        '十' to 10L, '拾' to 10L,
+        '百' to 100L, '佰' to 100L,
+        '千' to 1000L, '仟' to 1000L,
+        '万' to 10000L, '亿' to 100000000L
     )
 
     /**
