@@ -192,7 +192,7 @@ object VoiceParser {
 
     private val chineseDigitMap = mapOf(
         '零' to 0, '〇' to 0, '一' to 1, '二' to 2, '两' to 2, '俩' to 2, '三' to 3,
-        '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9, '九' to 9,
+        '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9,
         '壹' to 1, '贰' to 2, '叁' to 3, '肆' to 4, '伍' to 5,
         '陆' to 6, '柒' to 7, '捌' to 8, '玖' to 9
     )
