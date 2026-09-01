@@ -176,6 +176,44 @@ object VoiceParser {
     }
 
     /**
+     * 提取文本中的第一个阿拉伯数字。
+     * 如 "总重2500斤" → 2500.0，"单价1.4" → 1.4
+     */
+    fun firstNumber(text: String): Double? =
+        Regex("""\d+(?:\.\d+)?""").find(text)?.value?.toDoubleOrNull()
+
+    /**
+     * 针对"行内语音修改"的解析。
+     * 用户点某个字段后通常只说数值本身（如"两千五百"或"二五零零"），不带"总重/单价"关键词，
+     * 普通 [parse] 会因缺关键词而填不上。本方法在关键词解析失败时，
+     * 把文本中的第一个数字直接填入目标字段。
+     * @param target 目标字段名（GROSS/TARE/PRICE/TYPE/DATETIME），null 表示完整句子解析
+     */
+    fun parseForField(text: String, target: String?): ParseResult {
+        val result = parse(text)
+        if (target == null || target == "DATETIME") return result
+
+        val filled = when (target) {
+            "GROSS" -> result.grossWeight != null
+            "TARE" -> result.vehicleWeight != null
+            "PRICE" -> result.unitPrice != null
+            "TYPE" -> result.type != null
+            else -> true
+        }
+        if (filled) return result
+
+        val num = firstNumber(result.convertedText)
+        if (num != null && num > 0) {
+            when (target) {
+                "GROSS" -> { result.grossWeight = num; result.parseDetails.add("总重(直接取值): $num") }
+                "TARE" -> { result.vehicleWeight = num; result.parseDetails.add("车重(直接取值): $num") }
+                "PRICE" -> { result.unitPrice = num; result.parseDetails.add("单价(直接取值): $num") }
+            }
+        }
+        return result
+    }
+
+    /**
      * 将解析结果应用到Record
      */
     fun applyToRecord(record: Record, result: ParseResult): Record {

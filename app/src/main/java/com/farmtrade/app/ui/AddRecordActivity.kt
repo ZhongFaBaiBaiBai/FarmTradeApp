@@ -493,7 +493,14 @@ class AddRecordActivity : AppCompatActivity() {
             voiceTempFile = null
 
             if (!text.isNullOrEmpty()) {
-                val parsed = VoiceParser.parse(text)
+                val parsed = VoiceParser.parseForField(text, null)
+                // 兜底：一句话里没识别到任何数值/类型字段时（用户往往只说重量值），
+                // 把第一个数字当作总重填入
+                if (parsed.grossWeight == null && parsed.vehicleWeight == null &&
+                    parsed.unitPrice == null && parsed.quantity == null && parsed.type == null
+                ) {
+                    VoiceParser.firstNumber(parsed.convertedText)?.let { parsed.grossWeight = it }
+                }
                 applyVoiceResult(parsed)
                 toast("语音识别：${parsed.convertedText}")
             } else {

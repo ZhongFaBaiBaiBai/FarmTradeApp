@@ -617,7 +617,9 @@ class QuickRecordActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val parsed = VoiceParser.parse(text)
+            // 行内修改按目标字段解析（用户可能只说数值不带关键词）；
+            // 初始语音流程提示的是"请说出总重"，目标也按总重处理
+            val parsed = VoiceParser.parseForField(text, pendingVoiceField?.name ?: "GROSS")
             toast("语音识别：${parsed.convertedText}")
             val field = pendingVoiceField
 
