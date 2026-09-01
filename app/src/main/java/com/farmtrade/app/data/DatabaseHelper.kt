@@ -100,7 +100,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
     }
 
     fun getAllRecords(): List<Record> {
-        return queryRecords("$COL_DATE_TIME DESC")
+        return queryRecords("1=1 ORDER BY $COL_DATE_TIME DESC")
     }
 
     fun getRecordsByDate(date: String): List<Record> {
@@ -131,7 +131,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
 
     private fun queryRecords(queryClause: String): List<Record> {
         val records = mutableListOf<Record>()
-        val cursor = readableDatabase.rawQuery("SELECT * FROM $TABLE_RECORDS ORDER BY $queryClause", null)
+        val sql = "SELECT * FROM $TABLE_RECORDS WHERE $queryClause"
+        val cursor = readableDatabase.rawQuery(sql, null)
         cursor.use {
             while (it.moveToNext()) {
                 records.add(cursorToRecord(it))
