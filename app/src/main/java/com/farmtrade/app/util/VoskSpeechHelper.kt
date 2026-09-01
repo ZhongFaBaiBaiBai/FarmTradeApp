@@ -71,6 +71,117 @@ class VoskSpeechHelper(private val context: Context) {
     }
 
     /**
+     * 检查 assets 中是否有内置模型。
+     */
+    fun hasAssetsModel(): Boolean {
+        return try {
+            val assets = context.assets.list("vosk-model")
+            !assets.isNullOrEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 从 assets 中复制模型到本地文件目录（首次安装时使用）。
+     * @param onProgress 进度回调 0~100
+     * @return 是否成功
+     */
+    suspend fun copyModelFromAssets(onProgress: (Int) -> Unit = {}): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val modelDir = getModelDir()
+                if (!modelDir.exists()) modelDir.mkdirs()
+
+                val assetManager = context.assets
+                val basePath = "vosk-model"
+
+                // 递归复制 assets 中的模型文件
+                val totalFiles = countAssetsFiles(basePath)
+                var copied = 0
+
+                copyAssetsDir(basePath, modelDir.absolutePath) {
+                    copied++
+                    if (totalFiles > 0) {
+                        val progress = (copied * 100 / totalFiles).toInt()
+                        withContext(Dispatchers.Main) { onProgress(progress.coerceAtMost(99)) }
+                    }
+                }
+
+                withContext(Dispatchers.Main) { onProgress(100) }
+                Log.d(TAG, "从 assets 复制模型完成: ${modelDir.absolutePath}")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "从 assets 复制模型失败", e)
+                false
+            }
+        }
+
+    /**
+     * 统计 assets 目录下的文件总数。
+     */
+    private fun countAssetsFiles(path: String): Int {
+        val assetManager = context.assets
+        var count = 0
+        try {
+            val list = assetManager.list(path) ?: return 0
+            for (item in list) {
+                val fullPath = if (path.isEmpty()) item else "$path/$item"
+                // 判断是文件还是目录（尝试 list 一下，空的就是文件）
+                val subList = assetManager.list(fullPath)
+                if (subList.isNullOrEmpty()) {
+                    count++
+                } else {
+                    count += countAssetsFiles(fullPath)
+                }
+            }
+        } catch (e: Exception) {
+            // 忽略
+        }
+        return count
+    }
+
+    /**
+     * 递归复制 assets 目录到目标路径。
+     */
+    private fun copyAssetsDir(
+        srcPath: String,
+        destPath: String,
+        onFileCopied: () -> Unit
+    ) {
+        val assetManager = context.assets
+        val files = assetManager.list(srcPath) ?: return
+
+        for (filename in files) {
+            val src = if (srcPath.isEmpty()) filename else "$srcPath/$filename"
+            val dest = "$destPath/$filename"
+
+            val subList = try {
+                assetManager.list(src)
+            } catch (e: Exception) {
+                null
+            }
+
+            if (subList.isNullOrEmpty()) {
+                // 文件
+                val destFile = File(dest)
+                destFile.parentFile?.mkdirs()
+                assetManager.open(src).use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                onFileCopied()
+            } else {
+                // 目录
+                val destDir = File(dest)
+                if (!destDir.exists()) destDir.mkdirs()
+                copyAssetsDir(src, dest, onFileCopied)
+            }
+        }
+    }
+
+    /**
      * 下载并解压模型文件。
      * @param onProgress 进度回调 0~100
      * @return 是否成功

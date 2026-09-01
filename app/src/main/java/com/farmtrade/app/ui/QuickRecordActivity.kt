@@ -506,6 +506,9 @@ class QuickRecordActivity : AppCompatActivity() {
     private fun startLocalVoiceRecognition() {
         if (voskHelper.isModelReady()) {
             startRecordingAndRecognize()
+        } else if (voskHelper.hasAssetsModel()) {
+            // APK 内置了模型，直接从 assets 复制（不耗流量，速度快）
+            copyModelFromAssetsAndRecord()
         } else {
             MaterialAlertDialogBuilder(this)
                 .setTitle("下载语音模型")
@@ -515,6 +518,30 @@ class QuickRecordActivity : AppCompatActivity() {
                     if (!this::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()
                 }
                 .show()
+        }
+    }
+
+    private fun copyModelFromAssetsAndRecord() {
+        val progressDialog = ProgressDialog(this).apply {
+            setMessage("正在初始化语音模型...")
+            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
+            setCancelable(false)
+            max = 100
+            show()
+        }
+
+        lifecycleScope.launch {
+            val success = voskHelper.copyModelFromAssets { progress ->
+                progressDialog.progress = progress
+            }
+            progressDialog.dismiss()
+            if (success) {
+                toast("语音模型初始化完成")
+                startRecordingAndRecognize()
+            } else {
+                toast("模型初始化失败")
+                if (!this@QuickRecordActivity::pendingRecord.isInitialized && mode == EXTRA_MODE_VOICE) finish()
+            }
         }
     }
 

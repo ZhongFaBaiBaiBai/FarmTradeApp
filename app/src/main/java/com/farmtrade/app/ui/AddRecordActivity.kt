@@ -386,6 +386,9 @@ class AddRecordActivity : AppCompatActivity() {
     private fun checkModelAndStartRecording() {
         if (voskHelper.isModelReady()) {
             startRecording()
+        } else if (voskHelper.hasAssetsModel()) {
+            // APK 内置了模型，直接从 assets 复制（不耗流量，速度快）
+            copyModelFromAssetsAndStart()
         } else {
             // 模型未下载，询问用户是否下载
             MaterialAlertDialogBuilder(this)
@@ -394,6 +397,29 @@ class AddRecordActivity : AppCompatActivity() {
                 .setPositiveButton("下载") { _, _ -> downloadModelAndStart() }
                 .setNegativeButton("取消", null)
                 .show()
+        }
+    }
+
+    private fun copyModelFromAssetsAndStart() {
+        val progressDialog = ProgressDialog(this).apply {
+            setMessage("正在初始化语音模型...")
+            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
+            setCancelable(false)
+            max = 100
+            show()
+        }
+
+        lifecycleScope.launch {
+            val success = voskHelper.copyModelFromAssets { progress ->
+                progressDialog.progress = progress
+            }
+            progressDialog.dismiss()
+            if (success) {
+                toast("语音模型初始化完成")
+                startRecording()
+            } else {
+                toast("模型初始化失败")
+            }
         }
     }
 
