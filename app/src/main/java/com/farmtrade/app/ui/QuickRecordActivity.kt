@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
+import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,10 +16,12 @@ import androidx.lifecycle.lifecycleScope
 import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.ActivityQuickRecordBinding
+import com.farmtrade.app.databinding.DialogCustomTypeBinding
 import com.farmtrade.app.databinding.DialogInlineEditBinding
 import com.farmtrade.app.util.OcrHelper
 import com.farmtrade.app.util.SpeechInputController
 import com.farmtrade.app.util.VoiceParser
+import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import java.io.File
@@ -78,6 +81,12 @@ class QuickRecordActivity : AppCompatActivity() {
     private val orangeFg = 0xFFE65100.toInt()
     private val grayBg = 0xFFEEEEEE.toInt()
     private val grayFg = 0xFF888888.toInt()
+
+    // 买入(绿) / 卖出(红) 标签背景色
+    private val buyBg = 0xFF2E7D32.toInt()
+    private val buyFg = 0xFFFFFFFF.toInt()
+    private val sellBg = 0xFFC62828.toInt()
+    private val sellFg = 0xFFFFFFFF.toInt()
 
     // ==================== Activity Result ====================
 
@@ -180,8 +189,10 @@ class QuickRecordActivity : AppCompatActivity() {
 
         binding.ivBack.setOnClickListener { finish() }
 
-        // 卡片行点击 -> 行内编辑
-        binding.rowType.setOnClickListener { openInlineEdit(EditField.TYPE) }
+        // 卡片行点击 -> 专属编辑方式
+        binding.rowDirection.setOnClickListener { openDirectionDialog() }
+        binding.rowType.setOnClickListener { openTypeDialog() }
+        binding.rowMeasureMode.setOnClickListener { openMeasureDialog() }
         binding.rowDateTime.setOnClickListener { openInlineEdit(EditField.DATETIME) }
         binding.rowGrossWeight.setOnClickListener { openInlineEdit(EditField.GROSS) }
         binding.rowTareWeight.setOnClickListener { openInlineEdit(EditField.TARE) }
@@ -220,7 +231,7 @@ class QuickRecordActivity : AppCompatActivity() {
         r.source = if (mode == EXTRA_MODE_VOICE) Record.SOURCE_VOICE else Record.SOURCE_PHOTO
         r.isCarryOver = carryOverRecord != null
 
-        // 沿用今日上一条记录
+        // 沿用今日上一条记录（direction / type / measure / tare / price / unitName）
         carryOverRecord?.let {
             r.direction = it.direction
             r.type = it.type
@@ -229,6 +240,11 @@ class QuickRecordActivity : AppCompatActivity() {
             r.measureMode = it.measureMode
             r.unitName = it.unitName
         }
+
+        // 兜底：没有可沿用的记录时，填入合理默认值（方向=买入、按重量公斤）
+        if (r.direction.isBlank()) r.direction = "买入"
+        if (r.type.isBlank()) r.type = dbHelper.getAllTypes().firstOrNull().orEmpty()
+        if (r.measureMode.isBlank()) { r.measureMode = Record.MODE_WEIGHT_KG; r.unitName = "公斤" }
 
         // 语音识别结果覆盖
         if (voiceResult != null) {
@@ -287,14 +303,29 @@ class QuickRecordActivity : AppCompatActivity() {
         if (!this::pendingRecord.isInitialized) return
         val r = pendingRecord
         val unit = r.unitName
-        // 单价单位：重量模式下统一用"斤"，数量模式用自定义单位
         val priceUnit = when (r.measureMode) {
             Record.MODE_WEIGHT_KG -> "斤"
             Record.MODE_WEIGHT_JIN -> "斤"
             else -> r.unitName
         }
 
+        // 方向：买入=绿 / 卖出=红
         binding.tvTag.text = r.direction
+        if (r.direction == "卖出") {
+            binding.tvTag.setBackgroundColor(sellBg)
+            binding.tvTag.setTextColor(sellFg)
+        } else {
+            binding.tvTag.setBackgroundColor(buyBg)
+            binding.tvTag.setTextColor(buyFg)
+        }
+
+        // 计量方式文字
+        binding.tvMeasureMode.text = when (r.measureMode) {
+            Record.MODE_WEIGHT_KG -> "按重量(公斤)"
+            Record.MODE_WEIGHT_JIN -> "按重量(斤)"
+            else -> "按数量(${unit})"
+        }
+
         binding.tvTypeName.text = r.type
         binding.tvDateTime.text = r.dateTime
         binding.tvGrossWeight.text = "${Record.formatNumber(r.grossWeight)} $unit"
@@ -303,27 +334,48 @@ class QuickRecordActivity : AppCompatActivity() {
         binding.tvUnitPrice.text = "${Record.formatNumber(r.unitPrice)} 元/$priceUnit"
         binding.tvTotalAmount.text = "￥${Record.formatMoney(r.totalAmount)}"
 
-        // 总重来源：拍照 / 语音
+        // 总重来源：拍照 / 语音（不变）
         setBadge(
             binding.badgeGrossSource,
             if (r.source == Record.SOURCE_VOICE) "🎤 语音" else "📷 拍照",
             blueBg, blueFg
         )
-        // 车重 / 单价 / 类型：沿用 or 已改
+
+        val co = carryOverRecord
+        // 方向 沿用/已改
         setBadge(
-            binding.badgeTareSource,
-            if (isCarryOverValue(r.vehicleWeight, carryOverRecord?.vehicleWeight)) "沿用" else "已改",
-            orangeBg, orangeFg
+            binding.badgeDirectionSource,
+            if (co != null && r.direction == co.direction) "沿用" else "已改",
+            if (co != null && r.direction == co.direction) orangeBg else blueBg,
+            if (co != null && r.direction == co.direction) orangeFg else blueFg
         )
-        setBadge(
-            binding.badgePriceSource,
-            if (isCarryOverValue(r.unitPrice, carryOverRecord?.unitPrice)) "沿用" else "已改",
-            orangeBg, orangeFg
-        )
+        // 类型 沿用/已改
         setBadge(
             binding.badgeTypeSource,
-            if (carryOverRecord != null && r.type == carryOverRecord!!.type) "沿用" else "已改",
-            orangeBg, orangeFg
+            if (co != null && r.type == co.type) "沿用" else "已改",
+            if (co != null && r.type == co.type) orangeBg else blueBg,
+            if (co != null && r.type == co.type) orangeFg else blueFg
+        )
+        // 计量方式 沿用/已改
+        setBadge(
+            binding.badgeMeasureSource,
+            if (co != null && r.measureMode == co.measureMode) "沿用" else "已改",
+            if (co != null && r.measureMode == co.measureMode) orangeBg else blueBg,
+            if (co != null && r.measureMode == co.measureMode) orangeFg else blueFg
+        )
+        // 车重 沿用/已改
+        setBadge(
+            binding.badgeTareSource,
+            if (isCarryOverValue(r.vehicleWeight, co?.vehicleWeight)) "沿用" else "已改",
+            if (isCarryOverValue(r.vehicleWeight, co?.vehicleWeight)) orangeBg else blueBg,
+            if (isCarryOverValue(r.vehicleWeight, co?.vehicleWeight)) orangeFg else blueFg
+        )
+        // 单价 沿用/已改
+        setBadge(
+            binding.badgePriceSource,
+            if (isCarryOverValue(r.unitPrice, co?.unitPrice)) "沿用" else "已改",
+            if (isCarryOverValue(r.unitPrice, co?.unitPrice)) orangeBg else blueBg,
+            if (isCarryOverValue(r.unitPrice, co?.unitPrice)) orangeFg else blueFg
         )
         setBadge(binding.badgeDateSource, "✏️", grayBg, grayFg)
     }
@@ -349,8 +401,184 @@ class QuickRecordActivity : AppCompatActivity() {
         tv.setPadding(h, v, h, v)
     }
 
-    // ==================== 行内编辑 ====================
+    // ==================== 行内编辑：各字段专属对话框 ====================
 
+    /** 买入/卖出方向：单选对话框 */
+    private fun openDirectionDialog() {
+        if (!this::pendingRecord.isInitialized) return
+        val options = arrayOf("买入", "卖出")
+        val currentIdx = options.indexOf(pendingRecord.direction.takeIf { it.isNotBlank() } ?: "买入")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("选择买卖方向")
+            .setPositiveButton("恢复沿用") { _, _ ->
+                carryOverRecord?.direction?.let { pendingRecord.direction = it }
+                recalcAndRender()
+                toast("已恢复沿用")
+            }
+            .setSingleChoiceItems(options, currentIdx) { dlg, which ->
+                pendingRecord.direction = options[which]
+                recalcAndRender()
+                dlg.dismiss()
+                toast("方向：${options[which]}")
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 计量方式：公斤/斤/按数量 单选对话框 */
+    private fun openMeasureDialog() {
+        if (!this::pendingRecord.isInitialized) return
+        val modes = arrayOf(Record.MODE_WEIGHT_KG, Record.MODE_WEIGHT_JIN, Record.MODE_QUANTITY)
+        val labels = arrayOf("按重量（公斤）", "按重量（斤）", "按数量（件）")
+        val currentIdx = modes.indexOf(pendingRecord.measureMode).let { if (it < 0) 0 else it }
+
+        var selectedIdx = currentIdx
+        val dv = DialogInlineEditBinding.inflate(layoutInflater)
+        val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
+        dv.tvFieldLabel.text = "选择计量方式"
+        dv.tvHint.text = "改变计量方式后单位名称会同步调整，请核对数值"
+        // 隐藏通用文本框和几个不相关的按钮
+        dv.etInput.visibility = View.GONE
+        dv.btnRetakePhoto.visibility = View.GONE
+        dv.btnVoiceEdit.visibility = View.GONE
+
+        // 临时在底部插入一个单选列表：用 LinearLayout 里加三个按钮
+        val modeButtons = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val margin = (8 * resources.displayMetrics.density).toInt()
+            setPadding(margin, 0, margin, margin)
+            labels.forEachIndexed { idx, label ->
+                val btn = com.google.android.material.button.MaterialButton(
+                    this@QuickRecordActivity, null,
+                    com.google.android.material.R.attr.materialButtonOutlinedStyle
+                ).apply {
+                    text = label
+                    setTextColor(0xFF1565C0.toInt())
+                    id = View.generateViewId()
+                    strokeColor = android.content.res.ColorStateList.valueOf(0xFF1565C0.toInt())
+                    strokeWidth = 2
+                    if (idx == currentIdx) {
+                        setBackgroundColor(0xFFE3F2FD.toInt())
+                    }
+                    setOnClickListener {
+                        selectedIdx = idx
+                        pendingRecord.measureMode = modes[idx]
+                        // 同步单位名
+                        pendingRecord.unitName = when (modes[idx]) {
+                            Record.MODE_WEIGHT_KG -> "公斤"
+                            Record.MODE_WEIGHT_JIN -> "斤"
+                            else -> if (pendingRecord.unitName.isBlank()) "件" else pendingRecord.unitName
+                        }
+                        // 若是按数量，把 grossWeight/vehicleWeight 清空——数量模式下用 quantity
+                        if (modes[idx] == Record.MODE_QUANTITY) {
+                            pendingRecord.grossWeight = 0.0
+                            pendingRecord.vehicleWeight = 0.0
+                        }
+                        recalcAndRender()
+                        dialog.dismiss()
+                        toast("计量方式：$label")
+                    }
+                    val lp = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { topMargin = 4 * resources.displayMetrics.density.toInt() }
+                    layoutParams = lp
+                }
+                addView(btn)
+            }
+        }
+        // 在 btnCancel 前插入单选区
+        (dv.root as android.widget.LinearLayout).addView(modeButtons, 1)
+
+        dv.btnRestore.setOnClickListener {
+            val co = carryOverRecord
+            if (co != null) {
+                pendingRecord.measureMode = co.measureMode
+                pendingRecord.unitName = co.unitName
+                recalcAndRender()
+                toast("已恢复沿用")
+            } else {
+                toast("暂无可沿用的记录")
+            }
+            dialog.dismiss()
+        }
+        dv.btnCancel.setOnClickListener { dialog.dismiss() }
+        dv.btnConfirm.setOnClickListener {
+            recalcAndRender()
+            dialog.dismiss()
+        }
+        dialog.show()
+    }
+
+    /** 类型：chips 选择 + 自定义 + 语音 + 恢复沿用（不再用纯文本框） */
+    private fun openTypeDialog() {
+        if (!this::pendingRecord.isInitialized) return
+        val allTypes = dbHelper.getAllTypes()
+        val dv = DialogInlineEditBinding.inflate(layoutInflater)
+        val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
+        dv.tvFieldLabel.text = "选择或编辑类型"
+        dv.tvHint.text = "从已用类型中选择，或点击「自定义」输入新的名称"
+        // 隐藏输入框，在它的位置上摆一个 ChipGroup
+        dv.etInput.visibility = View.GONE
+        // 拍照不适合类型
+        dv.btnRetakePhoto.visibility = View.GONE
+
+        val chipGroup = com.google.android.material.chip.ChipGroup(this).apply {
+            isSingleSelection = false
+            setChipSpacingHorizontal((8 * resources.displayMetrics.density).toInt())
+            setChipSpacingVertical((4 * resources.displayMetrics.density).toInt())
+        }
+        allTypes.forEach { t ->
+            val chip = Chip(this).apply {
+                text = t
+                isCheckable = true
+                if (t == pendingRecord.type) isChecked = true
+                setOnClickListener {
+                    pendingRecord.type = t
+                    recalcAndRender()
+                    dialog.dismiss()
+                    toast("类型：$t")
+                }
+            }
+            chipGroup.addView(chip)
+        }
+        (dv.root as android.widget.LinearLayout).addView(chipGroup, 1)
+
+        dv.btnVoiceEdit.setOnClickListener {
+            dialog.dismiss()
+            voiceEditFor(EditField.TYPE)
+        }
+        dv.btnRestore.setOnClickListener {
+            carryOverRecord?.type?.let { pendingRecord.type = it }
+            recalcAndRender()
+            dialog.dismiss()
+            toast("已恢复沿用")
+        }
+        dv.btnCancel.setOnClickListener { dialog.dismiss() }
+        dv.btnConfirm.text = "自定义…"
+        dv.btnConfirm.setOnClickListener {
+            // 点"自定义"弹二级对话框让用户输入新类型名
+            val dv2 = DialogCustomTypeBinding.inflate(layoutInflater)
+            dv2.etCustomType.setText(dv.etInput.text)
+            MaterialAlertDialogBuilder(this)
+                .setTitle("自定义类型")
+                .setView(dv2.root)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确定") { _, _ ->
+                    val v = dv2.etCustomType.text.toString().trim()
+                    if (v.isNotBlank()) {
+                        pendingRecord.type = v
+                        recalcAndRender()
+                        toast("类型：$v")
+                    }
+                }
+                .show()
+            dialog.dismiss()
+        }
+        dialog.show()
+    }
+
+    /** 通用文本编辑对话框：用于日期时间 / 总重 / 车重 / 单价 */
     private fun openInlineEdit(field: EditField) {
         if (!this::pendingRecord.isInitialized) {
             toast("记录尚未生成")
@@ -361,6 +589,12 @@ class QuickRecordActivity : AppCompatActivity() {
         dv.etInput.setText(fieldCurrentValue(field))
         dv.etInput.inputType = fieldInputType(field)
         dv.tvHint.text = fieldHint(field)
+
+        // 日期时间没有拍照/语音辅助按钮
+        if (field == EditField.DATETIME) {
+            dv.btnRetakePhoto.visibility = View.GONE
+            dv.btnVoiceEdit.visibility = View.GONE
+        }
 
         val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
 
@@ -392,7 +626,6 @@ class QuickRecordActivity : AppCompatActivity() {
         EditField.GROSS -> "总重"
         EditField.TARE -> "车重"
         EditField.PRICE -> "单价"
-        EditField.TYPE -> "类型"
         EditField.DATETIME -> "日期时间"
     }
 
@@ -400,21 +633,19 @@ class QuickRecordActivity : AppCompatActivity() {
         EditField.GROSS -> Record.formatNumber(pendingRecord.grossWeight)
         EditField.TARE -> Record.formatNumber(pendingRecord.vehicleWeight)
         EditField.PRICE -> Record.formatNumber(pendingRecord.unitPrice)
-        EditField.TYPE -> pendingRecord.type
         EditField.DATETIME -> pendingRecord.dateTime
     }
 
     private fun fieldInputType(field: EditField): Int = when (field) {
-        EditField.TYPE, EditField.DATETIME -> InputType.TYPE_CLASS_TEXT
+        EditField.DATETIME -> InputType.TYPE_CLASS_TEXT
         else -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
     }
 
     private fun fieldHint(field: EditField): String = when (field) {
-        EditField.GROSS -> "输入总重（${pendingRecord.unitName}），可拍照识别"
-        EditField.TARE -> "输入车重（${pendingRecord.unitName}），可拍照识别"
-        EditField.PRICE -> "输入单价（元）"
-        EditField.TYPE -> "输入类型名称"
-        EditField.DATETIME -> "格式：yyyy-MM-dd HH:mm"
+        EditField.GROSS -> "输入总重（${pendingRecord.unitName}），可拍照或语音识别"
+        EditField.TARE -> "输入车重（${pendingRecord.unitName}），可拍照或语音识别"
+        EditField.PRICE -> "输入单价（元），可语音说"
+        EditField.DATETIME -> "格式：yyyy-MM-dd HH:mm（如 2026-09-01 10:30）"
     }
 
     private fun applyFieldInput(field: EditField, value: String) {
@@ -422,7 +653,6 @@ class QuickRecordActivity : AppCompatActivity() {
             EditField.GROSS -> pendingRecord.grossWeight = value.toDoubleOrNull() ?: 0.0
             EditField.TARE -> pendingRecord.vehicleWeight = value.toDoubleOrNull() ?: 0.0
             EditField.PRICE -> pendingRecord.unitPrice = value.toDoubleOrNull() ?: 0.0
-            EditField.TYPE -> if (value.isNotBlank()) pendingRecord.type = value
             EditField.DATETIME -> if (value.isNotBlank()) pendingRecord.dateTime = value
         }
     }
@@ -433,12 +663,11 @@ class QuickRecordActivity : AppCompatActivity() {
             EditField.GROSS -> pendingRecord.grossWeight = originalGrossWeight
             EditField.TARE -> pendingRecord.vehicleWeight = co?.vehicleWeight ?: 0.0
             EditField.PRICE -> pendingRecord.unitPrice = co?.unitPrice ?: 0.0
-            EditField.TYPE -> co?.type?.let { pendingRecord.type = it }
             EditField.DATETIME -> pendingRecord.dateTime = dateTimeFormat.format(Date())
         }
     }
 
-    // ----- 行内重新拍照 / 语音修改 -----
+    // ----- 行内重新拍照 / 语音修改（仅数值字段可用） -----
 
     private fun retakePhotoFor(field: EditField) {
         when (field) {
@@ -461,7 +690,6 @@ class QuickRecordActivity : AppCompatActivity() {
             EditField.GROSS -> r.grossWeight?.let { pendingRecord.grossWeight = it }
             EditField.TARE -> r.vehicleWeight?.let { pendingRecord.vehicleWeight = it }
             EditField.PRICE -> r.unitPrice?.let { pendingRecord.unitPrice = it }
-            EditField.TYPE -> r.type?.let { pendingRecord.type = it }
             EditField.DATETIME -> {}
         }
     }

@@ -95,13 +95,19 @@
                     android:orientation="vertical"
                     android:padding="16dp">
 
-                    <!-- Card header row: tag + source -->
+                    <!-- Card header row: tag + source (direction tag is clickable) -->
                     <LinearLayout
+                        android:id="@+id/rowDirection"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginBottom="10dp">
+                        android:layout_marginBottom="10dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
 
                         <TextView
                             android:id="@+id/tvTag"
@@ -121,12 +127,26 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="自动生成记录"
+                            android:text="点击切换买卖方向"
                             android:textColor="#888888"
-                            android:textSize="14sp"
-                            android:layout_marginStart="10dp" />
+                            android:textSize="12sp"
+                            android:layout_marginStart="8dp" />
 
                         <TextView
+                            android:id="@+id/badgeDirectionSource"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:textSize="13sp"
+                            android:background="#eeeeee"
+                            android:textColor="#888888"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            android:paddingTop="3dp"
+                            android:paddingBottom="3dp" />
+
+                        <TextView
+                            android:id="@+id/badgeGrossSource"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="📷 拍照"
@@ -136,7 +156,8 @@
                             android:paddingStart="8dp"
                             android:paddingEnd="8dp"
                             android:paddingTop="3dp"
-                            android:paddingBottom="3dp" />
+                            android:paddingBottom="3dp"
+                            android:layout_marginStart="8dp" />
                     </LinearLayout>
 
                     <!-- Type row (clickable, blue text) -->
@@ -176,6 +197,65 @@
                             android:layout_height="wrap_content"
                             android:text="📷"
                             android:textSize="14sp"
+                            android:layout_marginStart="8dp" />
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@android:drawable/ic_menu_edit"
+                            android:contentDescription="编辑"
+                            app:tint="#1565c0"
+                            android:layout_marginStart="6dp" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#e8e8e8" />
+
+                    <!-- Measure mode row (clickable, blue text) -->
+                    <LinearLayout
+                        android:id="@+id/rowMeasureMode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="计量方式"
+                            android:textColor="#888888"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/tvMeasureMode"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="按重量(公斤)"
+                            android:textColor="#1565c0"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:gravity="end" />
+
+                        <TextView
+                            android:id="@+id/badgeMeasureSource"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="沿用"
+                            android:textSize="13sp"
+                            android:textColor="#e65100"
+                            android:background="#fff3e0"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            android:paddingTop="3dp"
+                            android:paddingBottom="3dp"
                             android:layout_marginStart="8dp" />
 
                         <ImageView
