@@ -559,13 +559,12 @@ class QuickRecordActivity : AppCompatActivity() {
         dv.btnConfirm.setOnClickListener {
             // 点"自定义"弹二级对话框让用户输入新类型名
             val dv2 = DialogCustomTypeBinding.inflate(layoutInflater)
-            dv2.etCustomType.setText(dv.etInput.text)
             MaterialAlertDialogBuilder(this)
                 .setTitle("自定义类型")
                 .setView(dv2.root)
                 .setNegativeButton("取消", null)
                 .setPositiveButton("确定") { _, _ ->
-                    val v = dv2.etCustomType.text.toString().trim()
+                    val v = dv2.etTypeName.text.toString().trim()
                     if (v.isNotBlank()) {
                         pendingRecord.type = v
                         recalcAndRender()
@@ -627,6 +626,7 @@ class QuickRecordActivity : AppCompatActivity() {
         EditField.TARE -> "车重"
         EditField.PRICE -> "单价"
         EditField.DATETIME -> "日期时间"
+        EditField.TYPE -> "类型"
     }
 
     private fun fieldCurrentValue(field: EditField): String = when (field) {
@@ -634,10 +634,11 @@ class QuickRecordActivity : AppCompatActivity() {
         EditField.TARE -> Record.formatNumber(pendingRecord.vehicleWeight)
         EditField.PRICE -> Record.formatNumber(pendingRecord.unitPrice)
         EditField.DATETIME -> pendingRecord.dateTime
+        EditField.TYPE -> pendingRecord.type
     }
 
     private fun fieldInputType(field: EditField): Int = when (field) {
-        EditField.DATETIME -> InputType.TYPE_CLASS_TEXT
+        EditField.TYPE, EditField.DATETIME -> InputType.TYPE_CLASS_TEXT
         else -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
     }
 
@@ -646,6 +647,7 @@ class QuickRecordActivity : AppCompatActivity() {
         EditField.TARE -> "输入车重（${pendingRecord.unitName}），可拍照或语音识别"
         EditField.PRICE -> "输入单价（元），可语音说"
         EditField.DATETIME -> "格式：yyyy-MM-dd HH:mm（如 2026-09-01 10:30）"
+        EditField.TYPE -> "输入类型名称"
     }
 
     private fun applyFieldInput(field: EditField, value: String) {
@@ -654,6 +656,7 @@ class QuickRecordActivity : AppCompatActivity() {
             EditField.TARE -> pendingRecord.vehicleWeight = value.toDoubleOrNull() ?: 0.0
             EditField.PRICE -> pendingRecord.unitPrice = value.toDoubleOrNull() ?: 0.0
             EditField.DATETIME -> if (value.isNotBlank()) pendingRecord.dateTime = value
+            EditField.TYPE -> if (value.isNotBlank()) pendingRecord.type = value
         }
     }
 
@@ -664,6 +667,7 @@ class QuickRecordActivity : AppCompatActivity() {
             EditField.TARE -> pendingRecord.vehicleWeight = co?.vehicleWeight ?: 0.0
             EditField.PRICE -> pendingRecord.unitPrice = co?.unitPrice ?: 0.0
             EditField.DATETIME -> pendingRecord.dateTime = dateTimeFormat.format(Date())
+            EditField.TYPE -> co?.type?.let { pendingRecord.type = it }
         }
     }
 
@@ -690,6 +694,7 @@ class QuickRecordActivity : AppCompatActivity() {
             EditField.GROSS -> r.grossWeight?.let { pendingRecord.grossWeight = it }
             EditField.TARE -> r.vehicleWeight?.let { pendingRecord.vehicleWeight = it }
             EditField.PRICE -> r.unitPrice?.let { pendingRecord.unitPrice = it }
+            EditField.TYPE -> r.type?.let { pendingRecord.type = it }
             EditField.DATETIME -> {}
         }
     }
