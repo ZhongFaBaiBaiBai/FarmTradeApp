@@ -7,18 +7,16 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.widget.Toast
 import com.farmtrade.app.data.Record
-import org.apache.poi.ss.usermodel.CellStyle
-import org.apache.poi.ss.usermodel.FillPatternType
-import org.apache.poi.ss.usermodel.HorizontalAlignment
-import org.apache.poi.ss.usermodel.IndexedColors
-import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStreamWriter
+import java.io.Writer
+import java.nio.charset.StandardCharsets
 
 /**
- * 导出帮助工具：将交易记录导出为 Excel(.xlsx) 或 PDF 文件。
+ * 导出帮助工具：将交易记录导出为 CSV 或 PDF 文件。
  *
- * Excel 使用 Apache POI；PDF 使用 Android 自带的 [PdfDocument]。
+ * CSV 使用标准库（UTF-8 BOM，Excel 可直接打开）；PDF 使用 Android 自带的 [PdfDocument]。
  * 文件统一保存到应用专属外部文件目录（无需存储权限）。
  */
 object ExportHelper {
@@ -29,11 +27,6 @@ object ExportHelper {
         "净重", "数量", "单位", "单价", "总额", "来源"
     )
 
-    /** Excel 各列宽度（单位 1/256 字符宽） */
-    private val COLUMN_WIDTHS = intArrayOf(
-        5200, 2800, 2800, 3200, 2800, 2800, 2800, 2800, 2000, 2800, 3800, 2400
-    )
-
     /** PDF 表格列定义 */
     private class PdfColumn(
         val title: String,
@@ -42,7 +35,7 @@ object ExportHelper {
     )
 
     /**
-     * 将记录导出为 Excel(.xlsx)。
+     * 将记录导出为 CSV 文件（Excel/WPS 可直接打开）。
      *
      * @param context 上下文
      * @param records 要导出的记录列表
@@ -55,75 +48,48 @@ object ExportHelper {
             return false
         }
 
-        var workbook: XSSFWorkbook? = null
         return try {
-            workbook = XSSFWorkbook()
-            val sheet = workbook.createSheet("交易记录")
-
-            // 表头样式
-            val headerStyle: CellStyle = workbook.createCellStyle().apply {
-                fillForegroundColor = IndexedColors.LIGHT_GREEN.index
-                fillPattern = FillPatternType.SOLID_FOREGROUND
-                alignment = HorizontalAlignment.CENTER_SELECTION
-                setFont(workbook.createFont().apply {
-                    bold = true
-                    color = IndexedColors.DARK_GREEN.index
-                })
-            }
-
-            // 正文样式
-            val bodyStyle: CellStyle = workbook.createCellStyle().apply {
-                alignment = HorizontalAlignment.CENTER_SELECTION
-            }
-
-            // 表头行
-            val headerRow = sheet.createRow(0)
-            HEADERS.forEachIndexed { i, title ->
-                headerRow.createCell(i).apply {
-                    setCellValue(title)
-                    setCellStyle(headerStyle)
-                }
-            }
-
-            // 数据行
-            records.forEachIndexed { index, record ->
-                val row = sheet.createRow(index + 1)
-                recordToRow(record).forEachIndexed { col, value ->
-                    row.createCell(col).apply {
-                        setCellValue(value)
-                        setCellStyle(bodyStyle)
-                    }
-                }
-            }
-
-            // 列宽（手动设置，避免 autoSizeColumn 在 Android 上调用 AWT 报错）
-            for (i in HEADERS.indices) {
-                sheet.setColumnWidth(i, COLUMN_WIDTHS[i])
-            }
-            // 冻结表头
-            sheet.createFreezePane(0, 1)
-
-            // 写入文件
             val dir = context.getExternalFilesDir(null)
             if (dir == null) {
                 Toast.makeText(context, "无法访问存储目录", Toast.LENGTH_SHORT).show()
                 return false
             }
-            val file = File(dir, "$fileName.xlsx")
-            FileOutputStream(file).use { workbook.write(it) }
+            val file = File(dir, "$fileName.csv")
+
+            FileOutputStream(file).use { fos ->
+                // 写入 UTF-8 BOM，确保 Excel 正确识别中文编码
+                fos.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
+                val writer: Writer = OutputStreamWriter(fos, StandardCharsets.UTF_8)
+
+                // 写表头
+                writer.write(HEADERS.joinToString(",") { escapeCsv(it) })
+                writer.write("\n")
+
+                // 写数据行
+                for (record in records) {
+                    val row = recordToRow(record)
+                    writer.write(row.joinToString(",") { escapeCsv(it) })
+                    writer.write("\n")
+                }
+                writer.flush()
+            }
 
             Toast.makeText(context, "已导出到：${file.absolutePath}", Toast.LENGTH_LONG).show()
             true
         } catch (e: Exception) {
             Toast.makeText(context, "导出失败：${e.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
             false
-        } finally {
-            try {
-                workbook?.close()
-            } catch (_: Exception) {
-                // 忽略关闭异常
-            }
         }
+    }
+
+    /**
+     * CSV 字段转义：包含逗号、引号、换行时用双引号包裹，内部引号翻倍。
+     */
+    private fun escapeCsv(field: String): String {
+        if (field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r')) {
+            return "\"${field.replace("\"", "\"\"")}\""
+        }
+        return field
     }
 
     /**

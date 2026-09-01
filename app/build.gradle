@@ -43,9 +43,7 @@ dependencies {
     implementation 'com.google.mlkit:text-recognition-chinese:16.0.0'
     // 语音识别
     implementation 'com.google.android.material:material:1.11.0'
-    // Excel导出
-    implementation 'org.apache.poi:poi:5.2.3'
-    implementation 'org.apache.poi:poi-ooxml:5.2.3'
+    // CSV导出（无需第三方库，使用标准库）
     // 图片加载
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     // 协程
