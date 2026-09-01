@@ -62,7 +62,29 @@ jobs:
         rm -rf /tmp/vosk-model.zip /tmp/vosk-tmp
 
     - name: 构建 Debug APK
-      run: gradle assembleDebug --no-daemon --stacktrace 2>&1 | tail -200
+      run: |
+        gradle assembleDebug --no-daemon --stacktrace > /tmp/build.log 2>&1
+        echo "=== 构建结果 ==="
+        if grep -q "BUILD SUCCESSFUL" /tmp/build.log; then
+          echo "✅ 构建成功"
+        else
+          echo "❌ 构建失败，以下是错误摘要："
+          grep -n "error:" /tmp/build.log | head -30
+          echo "---"
+          grep -n "^e: " /tmp/build.log | head -30
+          echo "---"
+          grep -n "FAILURE\|Caused by" /tmp/build.log | tail -20
+        fi
+        cat /tmp/build.log > build-full.log
+        echo "完整日志已保存到 build-full.log"
+
+    - name: 上传构建日志（失败时）
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log
+        path: build-full.log
+        retention-days: 7
 
     - name: 上传 APK
       uses: actions/upload-artifact@v4
