@@ -24,4 +24,5 @@
     <color name="text_secondary">#888888</color>
     <color name="text_hint">#aaaaaa</color>
     <color name="white">#ffffff</color>
+    <color name="black">#000000</color>
 </resources>
