@@ -1,0 +1,55 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: 设置 Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        sdk-platform: 34
+        sdk-build-tools: 34.0.0
+
+    - name: 安装 Gradle
+      run: |
+        wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip
+        unzip -q gradle-8.4-bin.zip
+        echo "GRADLE_HOME=$PWD/gradle-8.4" >> $GITHUB_ENV
+        echo "$PWD/gradle-8.4/bin" >> $GITHUB_PATH
+
+    - name: 缓存 Gradle 依赖
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ hashFiles('**/*.gradle', '**/*.gradle.kts') }}
+        restore-keys: gradle-
+
+    - name: 构建 Debug APK
+      working-directory: FarmTradeApp
+      run: gradle assembleDebug --no-daemon --stacktrace
+
+    - name: 上传 APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: FarmTradeApp-debug-apk
+        path: FarmTradeApp/app/build/outputs/apk/debug/*.apk
+        retention-days: 30
