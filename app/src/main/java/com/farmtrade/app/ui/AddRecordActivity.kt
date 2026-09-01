@@ -1,15 +1,10 @@
 package com.farmtrade.app.ui
 
 import android.Manifest
-import android.app.ProgressDialog
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -17,16 +12,14 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.ActivityAddRecordBinding
 import com.farmtrade.app.databinding.DialogCustomTypeBinding
-import com.farmtrade.app.util.AudioRecorder
 import com.farmtrade.app.util.OcrHelper
+import com.farmtrade.app.util.SpeechInputController
 import com.farmtrade.app.util.VoiceParser
-import com.farmtrade.app.util.VoskSpeechHelper
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
@@ -94,15 +87,40 @@ class AddRecordActivity : AppCompatActivity() {
         }
 
     // ===== 本地语音识别 =====
-    private val voskHelper by lazy { VoskSpeechHelper(this) }
-    private val audioRecorder by lazy { AudioRecorder() }
-    private var isRecording = false
-    private var voiceTempFile: File? = null
+    private lateinit var speechInput: SpeechInputController
+
+    /** 语音流程回调：更新提示条 UI，识别结果自动填充表单 */
+    private val speechCallbacks = object : SpeechInputController.Callbacks {
+        override fun onRecordingStarted(outputFile: File) {
+            binding.tvVoiceHint.text = "🎤 正在录音，点击停止..."
+            binding.layoutVoiceInput.setBackgroundColor(0xFFFFEBEE.toInt())
+        }
+
+        override fun onRecognized(text: String?) {
+            if (text.isNullOrEmpty()) {
+                toast("未识别到语音内容，请说得清晰一些")
+                return
+            }
+            val parsed = VoiceParser.parseForField(text, null)
+            // 兜底：一句话里没识别到任何数值/类型字段时（用户往往只说重量值），
+            // 把第一个数字当作总重填入
+            if (parsed.grossWeight == null && parsed.vehicleWeight == null &&
+                parsed.unitPrice == null && parsed.quantity == null && parsed.type == null
+            ) {
+                VoiceParser.firstNumber(parsed.convertedText)?.let { parsed.grossWeight = it }
+            }
+            applyVoiceResult(parsed)
+            toast("语音识别：${parsed.convertedText}")
+        }
+
+        override fun onError(message: String) = toast(message)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAddRecordBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        speechInput = SpeechInputController(this, speechCallbacks)
 
         binding.ivBack.setOnClickListener { finish() }
 
@@ -298,7 +316,7 @@ class AddRecordActivity : AppCompatActivity() {
     }
 
     private fun launchCamera() {
-        cameraImageUri = createImageUri()
+        cameraImageUri = OcrHelper.createImageUri(this)
         if (cameraImageUri == null) {
             toast("无法创建图片文件")
             return
@@ -310,19 +328,9 @@ class AddRecordActivity : AppCompatActivity() {
         }
     }
 
-    private fun createImageUri(): Uri? {
-        return try {
-            val file = File.createTempFile("weigh_${System.currentTimeMillis()}", ".jpg", cacheDir)
-            file.deleteOnExit()
-            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     private fun runOcr(uri: Uri) {
         lifecycleScope.launch {
-            val bitmap = loadBitmap(uri)
+            val bitmap = OcrHelper.loadBitmap(this@AddRecordActivity, uri)
             val number = if (bitmap != null) OcrHelper.recognizeFromBitmap(bitmap) else null
             if (number != null) {
                 val value = number.toDoubleOrNull()
@@ -342,22 +350,6 @@ class AddRecordActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadBitmap(uri: Uri): Bitmap? {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val source = ImageDecoder.createSource(contentResolver, uri)
-                ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                    decoder.setMutableRequired(true)
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                MediaStore.Images.Media.getBitmap(contentResolver, uri)
-            }
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     // ==================== 语音输入（本地 Vosk 离线识别） ====================
 
     private fun requestAudioPermissionAndStart() {
@@ -372,140 +364,16 @@ class AddRecordActivity : AppCompatActivity() {
 
     /**
      * 语音输入条被点击：
-     * - 未在录音 → 检查模型 → 开始录音
+     * - 未在录音 → 准备模型并开始录音
      * - 正在录音 → 停止录音 → 识别 → 填充结果
      */
     private fun onVoiceInputClicked() {
-        if (isRecording) {
-            stopRecordingAndRecognize()
+        if (speechInput.isRecording()) {
+            binding.tvVoiceHint.text = "点击说话，自动识别填写"
+            binding.layoutVoiceInput.setBackgroundColor(0xFFF3E5F5.toInt())
+            speechInput.stopAndRecognize()
         } else {
-            checkModelAndStartRecording()
-        }
-    }
-
-    private fun checkModelAndStartRecording() {
-        if (voskHelper.isModelReady()) {
-            startRecording()
-        } else if (voskHelper.hasAssetsModel()) {
-            // APK 内置了模型，直接从 assets 复制（不耗流量，速度快）
-            copyModelFromAssetsAndStart()
-        } else {
-            // 模型未下载，询问用户是否下载
-            MaterialAlertDialogBuilder(this)
-                .setTitle("下载语音模型")
-                .setMessage("首次使用语音输入需要下载离线识别模型（约 40MB），下载后无需联网即可使用。是否现在下载？")
-                .setPositiveButton("下载") { _, _ -> downloadModelAndStart() }
-                .setNegativeButton("取消", null)
-                .show()
-        }
-    }
-
-    private fun copyModelFromAssetsAndStart() {
-        val progressDialog = ProgressDialog(this).apply {
-            setMessage("正在初始化语音模型...")
-            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
-            setCancelable(false)
-            max = 100
-            show()
-        }
-
-        lifecycleScope.launch {
-            val success = voskHelper.copyModelFromAssets { progress ->
-                progressDialog.progress = progress
-            }
-            progressDialog.dismiss()
-            if (success) {
-                toast("语音模型初始化完成")
-                startRecording()
-            } else {
-                toast("模型初始化失败")
-            }
-        }
-    }
-
-    private fun downloadModelAndStart() {
-        val progressDialog = ProgressDialog(this).apply {
-            setMessage("正在下载语音模型...")
-            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
-            setCancelable(false)
-            max = 100
-            show()
-        }
-
-        lifecycleScope.launch {
-            val success = voskHelper.downloadModel { progress ->
-                progressDialog.progress = progress
-            }
-            progressDialog.dismiss()
-            if (success) {
-                toast("模型下载完成")
-                startRecording()
-            } else {
-                toast("模型下载失败，请检查网络后重试")
-            }
-        }
-    }
-
-    private fun startRecording() {
-        val outputFile = File(cacheDir, "voice_${System.currentTimeMillis()}.wav")
-        voiceTempFile = outputFile
-        audioRecorder.startRecording(outputFile)
-        isRecording = true
-        // 更新 UI 提示正在录音
-        binding.tvVoiceHint.text = "🎤 正在录音，点击停止..."
-        binding.layoutVoiceInput.setBackgroundColor(0xFFFFEBEE.toInt())
-    }
-
-    private fun stopRecordingAndRecognize() {
-        binding.tvVoiceHint.text = "点击说话，自动识别填写"
-        binding.layoutVoiceInput.setBackgroundColor(0xFFF3E5F5.toInt())
-
-        lifecycleScope.launch {
-            val wavFile = audioRecorder.stopRecording()
-            isRecording = false
-
-            if (wavFile == null) {
-                toast("录音失败")
-                return@launch
-            }
-
-            // 显示识别中提示
-            val progressDialog = ProgressDialog(this@AddRecordActivity).apply {
-                setMessage("正在识别...")
-                setCancelable(false)
-                show()
-            }
-
-            // 加载模型（首次加载可能需要几秒）
-            val modelLoaded = voskHelper.loadModel()
-            if (!modelLoaded) {
-                progressDialog.dismiss()
-                toast("语音模型加载失败")
-                return@launch
-            }
-
-            // 进行识别
-            val text = voskHelper.transcribe(wavFile)
-            progressDialog.dismiss()
-
-            // 清理临时文件
-            wavFile.delete()
-            voiceTempFile = null
-
-            if (!text.isNullOrEmpty()) {
-                val parsed = VoiceParser.parseForField(text, null)
-                // 兜底：一句话里没识别到任何数值/类型字段时（用户往往只说重量值），
-                // 把第一个数字当作总重填入
-                if (parsed.grossWeight == null && parsed.vehicleWeight == null &&
-                    parsed.unitPrice == null && parsed.quantity == null && parsed.type == null
-                ) {
-                    VoiceParser.firstNumber(parsed.convertedText)?.let { parsed.grossWeight = it }
-                }
-                applyVoiceResult(parsed)
-                toast("语音识别：${parsed.convertedText}")
-            } else {
-                toast("未识别到语音内容，请说得清晰一些")
-            }
+            speechInput.startFlow()
         }
     }
 
@@ -633,8 +501,7 @@ class AddRecordActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        audioRecorder.release()
-        voskHelper.release()
+        speechInput.release()
     }
 
     companion object {

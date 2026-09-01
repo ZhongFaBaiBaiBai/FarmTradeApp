@@ -2,13 +2,17 @@ package com.farmtrade.app.util
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.File
 import kotlin.coroutines.resume
 import kotlin.math.ln
 
@@ -44,6 +48,38 @@ object OcrHelper {
             recognizeFromBitmap(bitmap) { result ->
                 if (cont.isActive) cont.resume(result)
             }
+        }
+    }
+
+    /**
+     * 为拍照创建临时图片 Uri（经 FileProvider 共享）
+     */
+    fun createImageUri(context: Context): Uri? {
+        return try {
+            val file = File.createTempFile("weigh_${System.currentTimeMillis()}", ".jpg", context.cacheDir)
+            file.deleteOnExit()
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 从 Uri 加载 Bitmap（兼容 Android 9 以下）
+     */
+    fun loadBitmap(context: Context, uri: Uri): Bitmap? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val source = ImageDecoder.createSource(context.contentResolver, uri)
+                ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                    decoder.setMutableRequired(true)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
