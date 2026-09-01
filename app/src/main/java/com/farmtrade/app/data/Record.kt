@@ -53,9 +53,17 @@ data class Record(
 
     /**
      * 计算总金额
+     * - 公斤模式：单价按"元/斤"计算，总额 = 净重(公斤) × 2 × 单价
+     * - 斤模式：总额 = 净重(斤) × 单价
+     * - 数量模式：总额 = 数量 × 单价
      */
     fun calculateTotalAmount(): Double {
-        return calculateNetWeight() * unitPrice
+        val net = calculateNetWeight()
+        return if (measureMode == MODE_WEIGHT_KG) {
+            net * 2 * unitPrice
+        } else {
+            net * unitPrice
+        }
     }
 
     /**

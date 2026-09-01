@@ -155,6 +155,16 @@ class AddRecordActivity : AppCompatActivity() {
         binding.etTareWeight.addTextChangedListener(recalcWatcher)
         binding.etUnitPrice.addTextChangedListener(recalcWatcher)
         binding.etQuantity.addTextChangedListener(recalcWatcher)
+        // 数量模式下单位名称变化时更新单价标签
+        binding.etUnitName.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (measureMode == Record.MODE_QUANTITY) {
+                    binding.tvUnitPriceLabel.text = "单价（元/${s?.ifBlank { "个" }}）"
+                }
+            }
+        })
 
         // 6. 拍照识别（毛重 / 车重）
         binding.btnPhotoGross.setOnClickListener { requestCameraFor(0) }
@@ -246,9 +256,12 @@ class AddRecordActivity : AppCompatActivity() {
         if (mode == Record.MODE_QUANTITY) {
             binding.layoutWeightSection.visibility = View.GONE
             binding.layoutQuantitySection.visibility = View.VISIBLE
+            binding.tvUnitPriceLabel.text = "单价（元/${binding.etUnitName.text.ifBlank { "个" }}）"
         } else {
             binding.layoutWeightSection.visibility = View.VISIBLE
             binding.layoutQuantitySection.visibility = View.GONE
+            // 公斤和斤模式下，单价单位都是"元/斤"
+            binding.tvUnitPriceLabel.text = "单价（元/斤）"
         }
         recalcNetAndTotal()
     }
@@ -267,7 +280,15 @@ class AddRecordActivity : AppCompatActivity() {
         } else {
             val net = (gross - tare).coerceAtLeast(0.0)
             binding.tvNetWeight.text = Record.formatNumber(net)
-            binding.tvTotalPreview.text = "￥${Record.formatMoney(net * price)}"
+            // 公斤和斤模式下，单价都是"元/斤"
+            // 公斤模式：总额 = 净重(公斤) × 2 × 单价
+            // 斤模式：总额 = 净重(斤) × 单价
+            val total = if (measureMode == Record.MODE_WEIGHT_KG) {
+                net * 2 * price
+            } else {
+                net * price
+            }
+            binding.tvTotalPreview.text = "￥${Record.formatMoney(total)}"
         }
     }
 

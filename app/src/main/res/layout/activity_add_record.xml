@@ -486,9 +486,10 @@
                 android:layout_marginBottom="12dp">
 
                 <TextView
+                    android:id="@+id/tvUnitPriceLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="单价"
+                    android:text="单价（元/斤）"
                     android:textColor="#333333"
                     android:textSize="16sp" />
 

@@ -131,9 +131,15 @@ class RecordAdapter(
                 "净重:${Record.formatNumber(record.netWeight)} ${record.unitName}"
         }
 
-        // 单价：单价:X元/unitName（沿用时附橙色"(沿用)"）
+        // 单价：单价:X元/单位（沿用时附橙色"(沿用)"）
+        // 公斤模式下单价按"元/斤"计算，所以显示也用"元/斤"
+        val priceUnit = when (record.measureMode) {
+            Record.MODE_WEIGHT_KG -> "斤"
+            Record.MODE_WEIGHT_JIN -> "斤"
+            else -> record.unitName
+        }
         b.tvUnitPrice.text = withCarryOver(
-            "单价:${Record.formatNumber(record.unitPrice)}元/${record.unitName}",
+            "单价:${Record.formatNumber(record.unitPrice)}元/$priceUnit",
             record.isCarryOver,
             orange
         )

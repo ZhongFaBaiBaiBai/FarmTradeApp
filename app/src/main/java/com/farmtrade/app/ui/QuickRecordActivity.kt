@@ -278,6 +278,12 @@ class QuickRecordActivity : AppCompatActivity() {
         if (!this::pendingRecord.isInitialized) return
         val r = pendingRecord
         val unit = r.unitName
+        // 单价单位：重量模式下统一用"斤"，数量模式用自定义单位
+        val priceUnit = when (r.measureMode) {
+            Record.MODE_WEIGHT_KG -> "斤"
+            Record.MODE_WEIGHT_JIN -> "斤"
+            else -> r.unitName
+        }
 
         binding.tvTag.text = r.direction
         binding.tvTypeName.text = r.type
@@ -285,7 +291,7 @@ class QuickRecordActivity : AppCompatActivity() {
         binding.tvGrossWeight.text = "${Record.formatNumber(r.grossWeight)} $unit"
         binding.tvTareWeight.text = "${Record.formatNumber(r.vehicleWeight)} $unit"
         binding.tvNetWeight.text = "${Record.formatNumber(r.netWeight)} $unit"
-        binding.tvUnitPrice.text = "${Record.formatNumber(r.unitPrice)} 元/$unit"
+        binding.tvUnitPrice.text = "${Record.formatNumber(r.unitPrice)} 元/$priceUnit"
         binding.tvTotalAmount.text = "￥${Record.formatMoney(r.totalAmount)}"
 
         // 毛重来源：拍照 / 语音
