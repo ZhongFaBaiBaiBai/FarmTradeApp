@@ -1,6 +1,8 @@
 package com.farmtrade.app.util
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -95,6 +97,7 @@ class VoskSpeechHelper(private val context: Context) {
 
                 val assetManager = context.assets
                 val basePath = "vosk-model"
+                val mainHandler = Handler(Looper.getMainLooper())
 
                 // 递归复制 assets 中的模型文件
                 val totalFiles = countAssetsFiles(basePath)
@@ -104,11 +107,11 @@ class VoskSpeechHelper(private val context: Context) {
                     copied++
                     if (totalFiles > 0) {
                         val progress = (copied * 100 / totalFiles).toInt()
-                        withContext(Dispatchers.Main) { onProgress(progress.coerceAtMost(99)) }
+                        mainHandler.post { onProgress(progress.coerceAtMost(99)) }
                     }
                 }
 
-                withContext(Dispatchers.Main) { onProgress(100) }
+                mainHandler.post { onProgress(100) }
                 Log.d(TAG, "从 assets 复制模型完成: ${modelDir.absolutePath}")
                 true
             } catch (e: Exception) {
