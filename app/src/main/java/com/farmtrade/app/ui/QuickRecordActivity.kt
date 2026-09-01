@@ -123,8 +123,6 @@ class QuickRecordActivity : AppCompatActivity() {
     private val voskHelper by lazy { VoskSpeechHelper(this) }
     private val audioRecorder by lazy { AudioRecorder() }
     private var isRecording = false
-    /** 行内语音修改时，解析结果要回填的字段；为空表示处于初始语音流程 */
-    private var pendingVoiceField: EditField? = null
 
     /** 跳转 AddRecordActivity "全部修改"，并透传保存结果给 RecordListActivity */
     private val editRecordLauncher =
