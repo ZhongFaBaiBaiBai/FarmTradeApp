@@ -43,13 +43,15 @@ jobs:
         key: gradle-${{ hashFiles('**/*.gradle', '**/*.gradle.kts') }}
         restore-keys: gradle-
 
+    - name: 创建 local.properties
+      run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
     - name: 构建 Debug APK
-      working-directory: FarmTradeApp
       run: gradle assembleDebug --no-daemon --stacktrace
 
     - name: 上传 APK
       uses: actions/upload-artifact@v4
       with:
         name: FarmTradeApp-debug-apk
-        path: FarmTradeApp/app/build/outputs/apk/debug/*.apk
+        path: app/build/outputs/apk/debug/*.apk
         retention-days: 30
