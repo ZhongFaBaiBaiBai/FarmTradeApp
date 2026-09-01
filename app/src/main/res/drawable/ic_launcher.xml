@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 背景圆 -->
+    <path
+        android:fillColor="#2e7d32"
+        android:pathData="M54,54m-50,0a50,50 0,1 1,100 0a50,50 0,1 1,-100 0" />
+
+    <!-- 叶子图形 -->
+    <path
+        android:fillColor="#ffffff"
+        android:pathData="M54,30 C42,30 32,40 32,52 C32,64 42,74 54,74 C66,74 76,64 76,52 C76,40 66,30 54,30 Z M54,38 C48,38 43,43 43,49 L43,55 L65,55 C65,55 65,55 65,55 C65,61 60,66 54,66 C48,66 43,61 43,55 L43,49" />
+
+    <!-- 叶脉 -->
+    <path
+        android:strokeColor="#2e7d32"
+        android:strokeWidth="2"
+        android:pathData="M54,38 L54,66" />
+
+    <!-- 小圆点装饰 -->
+    <path
+        android:fillColor="#a5d6a7"
+        android:pathData="M38,42 m-3,0 a3,3 0,1 1,6 0 a3,3 0,1 1,-6 0" />
+
+    <path
+        android:fillColor="#a5d6a7"
+        android:pathData="M70,42 m-3,0 a3,3 0,1 1,6 0 a3,3 0,1 1,-6 0" />
+
+    <path
+        android:fillColor="#a5d6a7"
+        android:pathData="M54,78 m-3,0 a3,3 0,1 1,6 0 a3,3 0,1 1,-6 0" />
+</vector>
