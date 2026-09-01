@@ -617,8 +617,8 @@ class QuickRecordActivity : AppCompatActivity() {
                 return@launch
             }
 
-            toast("语音识别：$text")
             val parsed = VoiceParser.parse(text)
+            toast("语音识别：${parsed.convertedText}")
             val field = pendingVoiceField
 
             if (field != null) {

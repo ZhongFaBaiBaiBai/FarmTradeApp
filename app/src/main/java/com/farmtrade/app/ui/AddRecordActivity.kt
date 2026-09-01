@@ -495,7 +495,7 @@ class AddRecordActivity : AppCompatActivity() {
             if (!text.isNullOrEmpty()) {
                 val parsed = VoiceParser.parse(text)
                 applyVoiceResult(parsed)
-                toast("语音识别：$text")
+                toast("语音识别：${parsed.convertedText}")
             } else {
                 toast("未识别到语音内容，请说得清晰一些")
             }

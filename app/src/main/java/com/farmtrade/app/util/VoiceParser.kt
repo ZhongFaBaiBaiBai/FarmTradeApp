@@ -22,7 +22,9 @@ object VoiceParser {
         var unitName: String? = null,
         var unitPrice: Double? = null,
         val parseDetails: MutableList<String> = mutableListOf(),
-        var rawText: String = ""
+        var rawText: String = "",
+        /** 中文数字转换后的文本（含阿拉伯数字），用于界面展示 */
+        var convertedText: String = ""
     )
 
     /**
@@ -41,6 +43,7 @@ object VoiceParser {
 
         // 先把中文数字转换成阿拉伯数字
         normalizedText = convertChineseNumbers(normalizedText)
+        result.convertedText = normalizedText
 
         val lowerText = normalizedText
 
@@ -357,46 +360,46 @@ object VoiceParser {
     private fun parseIntegerChinese(str: String): Long? {
         if (str.isEmpty()) return null
 
-        // 纯单个数字
-        if (str.length == 1) {
-            return chineseDigitMap[str[0]]?.toLong()
+        // 纯数字串（不含十百千万单位）：按位拼接。
+        // Vosk 常把数字逐位识别成汉字（如 "总重二五零零斤"），
+        // 必须支持: "二五零零" → 2500、"三五" → 35、"三" → 3
+        if (str.all { chineseDigitMap.containsKey(it) }) {
+            var value = 0L
+            for (c in str) {
+                value = value * 10 + (chineseDigitMap[c] ?: 0).toLong()
+            }
+            return value.takeIf { it > 0 }
         }
 
+        // 处理含单位（十百千万）的中文数字
         var total = 0L
         var wanSection = 0L  // 万以下的部分
         var qianSection = 0L // 千以下的部分
         var current = 0L     // 当前数字
         var lastUnit = 1L    // 上一个单位（用于末尾省略的位权推断）
         var hasAnyUnit = false
+        var hasZero = false  // 是否出现过"零"（影响末尾位权推断）
 
         for (c in str) {
             val digit = chineseDigitMap[c]
             val unit = unitMap[c]
 
             if (digit != null) {
+                if (digit == 0) hasZero = true
                 current = digit.toLong()
             } else if (unit != null) {
                 hasAnyUnit = true
                 when {
                     unit >= 100000000L -> { // 亿
-                        if (current > 0 || qianSection > 0 || wanSection > 0) {
-                            wanSection += qianSection + current
-                            total += wanSection * unit
-                        } else {
-                            total += unit
-                        }
+                        total += (wanSection + qianSection + current) * unit
                         wanSection = 0
                         qianSection = 0
                         current = 0
                         lastUnit = unit
                     }
                     unit >= 10000L -> { // 万
-                        if (current > 0 || qianSection > 0) {
-                            qianSection += current
-                            wanSection += qianSection * unit / 10000L
-                        } else {
-                            wanSection += unit
-                        }
+                        // "一万" → 10000, "十万" → 100000, "两万五" → 25000（万 + 末尾推断）
+                        wanSection += (qianSection + current) * unit
                         qianSection = 0
                         current = 0
                         lastUnit = unit
@@ -416,24 +419,17 @@ object VoiceParser {
         }
 
         // 处理末尾省略的数字（如 "两千五" = 2500, "一万二" = 12000）
+        // 若中间出现过"零"，末尾数字是个位（如 "两千零五" = 2005, "一百零一" = 101）
         if (current > 0 && hasAnyUnit) {
             val inferredUnit = when (lastUnit) {
-                1000L -> 100L    // 千后面的尾数 → 百
-                100L -> 10L      // 百后面的尾数 → 十
-                10L -> 1L        // 十后面的尾数 → 个
-                10000L -> 1000L  // 万后面的尾数 → 千
-                100000000L -> 10000000L // 亿后面的尾数 → 千万
+                1000L -> if (hasZero) 1L else 100L   // 千后面的尾数 → 百（有零则个位）
+                100L -> if (hasZero) 1L else 10L     // 百后面的尾数 → 十（有零则个位）
+                10L -> 1L                            // 十后面的尾数 → 个
+                10000L -> if (hasZero) 1L else 1000L // 万后面的尾数 → 千（有零则个位）
+                100000000L -> if (hasZero) 1L else 10000000L
                 else -> 1L
             }
             qianSection += current * inferredUnit
-        } else if (current > 0 && !hasAnyUnit) {
-            // 纯数字无单位（如 "一二三四"），不解析为数字（可能是其他含义）
-            // 但单个数字可以
-            if (str.length == 1) {
-                return current
-            }
-            // 多个数字无单位，按各位数字拼接处理（如 "一二" 不处理）
-            return null
         }
 
         total += wanSection + qianSection
