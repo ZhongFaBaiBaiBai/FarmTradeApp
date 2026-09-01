@@ -417,7 +417,7 @@ class SummaryActivity : AppCompatActivity() {
     // ==================== 底部导航 ====================
 
     private fun setupBottomNav() {
-        val nav = findViewById<BottomNavigationView>(R.id.bottomNavigationView)
+        val nav = findViewById<BottomNavigationView>(R.id.bottomNav)
         nav.setOnItemSelectedListener { item ->
             val target = when (item.itemId) {
                 R.id.nav_record -> "com.farmtrade.app.ui.RecordListActivity"

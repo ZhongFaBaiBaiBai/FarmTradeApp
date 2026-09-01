@@ -10,6 +10,7 @@ import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.ActivityRecordListBinding
 import com.farmtrade.app.databinding.DialogQuickAddBinding
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -78,9 +79,10 @@ class RecordListActivity : AppCompatActivity(), RecordAdapter.OnRecordClickListe
     }
 
     private fun setupBottomNavigation() {
+        val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
         // 高亮当前页（记录），之后再注册监听，避免初始化时触发跳转
-        binding.bottomNav.selectedItemId = R.id.nav_record
-        binding.bottomNav.setOnItemSelectedListener { item ->
+        bottomNav.selectedItemId = R.id.nav_record
+        bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_chart -> {
                     startActivity(Intent(this, ChartActivity::class.java))
