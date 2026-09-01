@@ -111,22 +111,58 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Export all data button -->
+            <!-- Export all data button (Excel for human) -->
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnExportAll"
+                android:id="@+id/btnExportExcel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="导出全部数据 (Excel)"
+                android:text="导出为 Excel（查看用）"
                 android:textColor="#ffffff"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:paddingTop="14dp"
                 android:paddingBottom="14dp"
-                android:layout_marginBottom="14dp"
+                android:layout_marginBottom="10dp"
                 app:backgroundTint="#2e7d32"
                 app:cornerRadius="10dp"
                 app:icon="@android:drawable/ic_menu_save"
                 app:iconTint="#ffffff" />
+
+            <!-- Export JSON for cross-device merge -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnExportJson"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="导出为 JSON（传另一台手机用）"
+                android:textColor="#ffffff"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:layout_marginBottom="10dp"
+                app:backgroundTint="#1565c0"
+                app:cornerRadius="10dp"
+                app:icon="@android:drawable/ic_menu_save"
+                app:iconTint="#ffffff" />
+
+            <!-- Import JSON -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnImportJson"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="导入记录（从 JSON 文件）"
+                android:textColor="#f57c00"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:layout_marginBottom="14dp"
+                app:strokeColor="#f57c00"
+                app:strokeWidth="1.5dp"
+                app:cornerRadius="10dp"
+                app:icon="@android:drawable/ic_menu_upload"
+                app:iconTint="#f57c00" />
 
             <!-- Clear all data button -->
             <com.google.android.material.button.MaterialButton

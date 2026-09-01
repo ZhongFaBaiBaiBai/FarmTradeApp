@@ -39,7 +39,7 @@ import java.util.Locale
  * - 展示自动生成记录卡片，每个字段带来源徽标，可点击行内编辑
  * - ✏️全部修改：跳转 [AddRecordActivity]；✅确认保存：入库并结束
  */
-class QuickRecordActivity : AppCompatActivity() {
+class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
     private lateinit var binding: ActivityQuickRecordBinding
     private val dbHelper by lazy { DatabaseHelper(this) }
@@ -189,10 +189,10 @@ class QuickRecordActivity : AppCompatActivity() {
 
         binding.ivBack.setOnClickListener { finish() }
 
-        // 卡片行点击 -> 专属编辑方式
-        binding.rowDirection.setOnClickListener { openDirectionDialog() }
-        binding.rowType.setOnClickListener { openTypeDialog() }
-        binding.rowMeasureMode.setOnClickListener { openMeasureDialog() }
+        // 卡片行点击 -> 专属编辑方式（方向/计量/类型 用抽取的辅助类，数值字段继续用通用文本框）
+        binding.rowDirection.setOnClickListener { QuickRecordEditDialogs.openDirectionDialog(this) }
+        binding.rowType.setOnClickListener { QuickRecordEditDialogs.openTypeDialog(this) }
+        binding.rowMeasureMode.setOnClickListener { QuickRecordEditDialogs.openMeasureDialog(this) }
         binding.rowDateTime.setOnClickListener { openInlineEdit(EditField.DATETIME) }
         binding.rowGrossWeight.setOnClickListener { openInlineEdit(EditField.GROSS) }
         binding.rowTareWeight.setOnClickListener { openInlineEdit(EditField.TARE) }
@@ -401,181 +401,19 @@ class QuickRecordActivity : AppCompatActivity() {
         tv.setPadding(h, v, h, v)
     }
 
-    // ==================== 行内编辑：各字段专属对话框 ====================
+    // ==================== QuickRecordEditDialogs.Host 实现 ====================
 
-    /** 买入/卖出方向：单选对话框 */
-    private fun openDirectionDialog() {
-        if (!this::pendingRecord.isInitialized) return
-        val options = arrayOf("买入", "卖出")
-        val currentIdx = options.indexOf(pendingRecord.direction.takeIf { it.isNotBlank() } ?: "买入")
-        MaterialAlertDialogBuilder(this)
-            .setTitle("选择买卖方向")
-            .setPositiveButton("恢复沿用") { _, _ ->
-                carryOverRecord?.direction?.let { pendingRecord.direction = it }
-                recalcAndRender()
-                toast("已恢复沿用")
-            }
-            .setSingleChoiceItems(options, currentIdx) { dlg, which ->
-                pendingRecord.direction = options[which]
-                recalcAndRender()
-                dlg.dismiss()
-                toast("方向：${options[which]}")
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
+    override val pendingRecord: Record
+        get() = this@QuickRecordActivity.pendingRecord
+    override val carryOverRecord: Record?
+        get() = this@QuickRecordActivity.carryOverRecord
+    override fun getAllTypes() = dbHelper.getAllTypes()
+    override fun recalcAndRender() = this@QuickRecordActivity.recalcAndRender()
+    override fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    override fun startVoiceEditForType() { voiceEditFor(EditField.TYPE) }
+    override fun activity(): AppCompatActivity = this
 
-    /** 计量方式：公斤/斤/按数量 单选对话框 */
-    private fun openMeasureDialog() {
-        if (!this::pendingRecord.isInitialized) return
-        val modes = arrayOf(Record.MODE_WEIGHT_KG, Record.MODE_WEIGHT_JIN, Record.MODE_QUANTITY)
-        val labels = arrayOf("按重量（公斤）", "按重量（斤）", "按数量（件）")
-        val currentIdx = modes.indexOf(pendingRecord.measureMode).let { if (it < 0) 0 else it }
-
-        var selectedIdx = currentIdx
-        val dv = DialogInlineEditBinding.inflate(layoutInflater)
-        val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
-        dv.tvFieldLabel.text = "选择计量方式"
-        dv.tvHint.text = "改变计量方式后单位名称会同步调整，请核对数值"
-        // 隐藏通用文本框和几个不相关的按钮
-        dv.etInput.visibility = View.GONE
-        dv.btnRetakePhoto.visibility = View.GONE
-        dv.btnVoiceEdit.visibility = View.GONE
-
-        // 临时在底部插入一个单选列表：用 LinearLayout 里加三个按钮
-        val modeButtons = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            val margin = (8 * resources.displayMetrics.density).toInt()
-            setPadding(margin, 0, margin, margin)
-            labels.forEachIndexed { idx, label ->
-                val btn = com.google.android.material.button.MaterialButton(
-                    this@QuickRecordActivity, null,
-                    com.google.android.material.R.attr.materialButtonOutlinedStyle
-                ).apply {
-                    text = label
-                    setTextColor(0xFF1565C0.toInt())
-                    id = View.generateViewId()
-                    strokeColor = android.content.res.ColorStateList.valueOf(0xFF1565C0.toInt())
-                    strokeWidth = 2
-                    if (idx == currentIdx) {
-                        setBackgroundColor(0xFFE3F2FD.toInt())
-                    }
-                    setOnClickListener {
-                        selectedIdx = idx
-                        pendingRecord.measureMode = modes[idx]
-                        // 同步单位名
-                        pendingRecord.unitName = when (modes[idx]) {
-                            Record.MODE_WEIGHT_KG -> "公斤"
-                            Record.MODE_WEIGHT_JIN -> "斤"
-                            else -> if (pendingRecord.unitName.isBlank()) "件" else pendingRecord.unitName
-                        }
-                        // 若是按数量，把 grossWeight/vehicleWeight 清空——数量模式下用 quantity
-                        if (modes[idx] == Record.MODE_QUANTITY) {
-                            pendingRecord.grossWeight = 0.0
-                            pendingRecord.vehicleWeight = 0.0
-                        }
-                        recalcAndRender()
-                        dialog.dismiss()
-                        toast("计量方式：$label")
-                    }
-                    val lp = android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply { topMargin = 4 * resources.displayMetrics.density.toInt() }
-                    layoutParams = lp
-                }
-                addView(btn)
-            }
-        }
-        // 在 btnCancel 前插入单选区
-        (dv.root as android.widget.LinearLayout).addView(modeButtons, 1)
-
-        dv.btnRestore.setOnClickListener {
-            val co = carryOverRecord
-            if (co != null) {
-                pendingRecord.measureMode = co.measureMode
-                pendingRecord.unitName = co.unitName
-                recalcAndRender()
-                toast("已恢复沿用")
-            } else {
-                toast("暂无可沿用的记录")
-            }
-            dialog.dismiss()
-        }
-        dv.btnCancel.setOnClickListener { dialog.dismiss() }
-        dv.btnConfirm.setOnClickListener {
-            recalcAndRender()
-            dialog.dismiss()
-        }
-        dialog.show()
-    }
-
-    /** 类型：chips 选择 + 自定义 + 语音 + 恢复沿用（不再用纯文本框） */
-    private fun openTypeDialog() {
-        if (!this::pendingRecord.isInitialized) return
-        val allTypes = dbHelper.getAllTypes()
-        val dv = DialogInlineEditBinding.inflate(layoutInflater)
-        val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
-        dv.tvFieldLabel.text = "选择或编辑类型"
-        dv.tvHint.text = "从已用类型中选择，或点击「自定义」输入新的名称"
-        // 隐藏输入框，在它的位置上摆一个 ChipGroup
-        dv.etInput.visibility = View.GONE
-        // 拍照不适合类型
-        dv.btnRetakePhoto.visibility = View.GONE
-
-        val chipGroup = com.google.android.material.chip.ChipGroup(this).apply {
-            isSingleSelection = false
-            setChipSpacingHorizontal((8 * resources.displayMetrics.density).toInt())
-            setChipSpacingVertical((4 * resources.displayMetrics.density).toInt())
-        }
-        allTypes.forEach { t ->
-            val chip = Chip(this).apply {
-                text = t
-                isCheckable = true
-                if (t == pendingRecord.type) isChecked = true
-                setOnClickListener {
-                    pendingRecord.type = t
-                    recalcAndRender()
-                    dialog.dismiss()
-                    toast("类型：$t")
-                }
-            }
-            chipGroup.addView(chip)
-        }
-        (dv.root as android.widget.LinearLayout).addView(chipGroup, 1)
-
-        dv.btnVoiceEdit.setOnClickListener {
-            dialog.dismiss()
-            voiceEditFor(EditField.TYPE)
-        }
-        dv.btnRestore.setOnClickListener {
-            carryOverRecord?.type?.let { pendingRecord.type = it }
-            recalcAndRender()
-            dialog.dismiss()
-            toast("已恢复沿用")
-        }
-        dv.btnCancel.setOnClickListener { dialog.dismiss() }
-        dv.btnConfirm.text = "自定义…"
-        dv.btnConfirm.setOnClickListener {
-            // 点"自定义"弹二级对话框让用户输入新类型名
-            val dv2 = DialogCustomTypeBinding.inflate(layoutInflater)
-            MaterialAlertDialogBuilder(this)
-                .setTitle("自定义类型")
-                .setView(dv2.root)
-                .setNegativeButton("取消", null)
-                .setPositiveButton("确定") { _, _ ->
-                    val v = dv2.etTypeName.text.toString().trim()
-                    if (v.isNotBlank()) {
-                        pendingRecord.type = v
-                        recalcAndRender()
-                        toast("类型：$v")
-                    }
-                }
-                .show()
-            dialog.dismiss()
-        }
-        dialog.show()
-    }
+    // ==================== 通用文本编辑对话框：日期时间 / 总重 / 车重 / 单价 ====================
 
     /** 通用文本编辑对话框：用于日期时间 / 总重 / 车重 / 单价 */
     private fun openInlineEdit(field: EditField) {
