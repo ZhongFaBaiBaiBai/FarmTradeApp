@@ -133,7 +133,7 @@ object OcrHelper {
         val priceCompact = priceCompactRegex.find(rawText)?.groupValues?.get(1)
 
         // 4. 按"有关键词优先，减法其次，兜底最后"分配
-        val assigned = mutableMapOf<Tag, Candidate>()
+        val assigned = mutableMapOf<Tag, Candidate?>()
         val usedValues = mutableSetOf<String>()
 
         // 4a. 优先关键词分配
@@ -209,7 +209,7 @@ object OcrHelper {
 
     private fun assignByKeyword(
         candidates: List<Candidate>,
-        assigned: MutableMap<Tag, Candidate>,
+        assigned: MutableMap<Tag, Candidate?>,
         usedValues: MutableSet<String>,
         tag: Tag
     ) {
