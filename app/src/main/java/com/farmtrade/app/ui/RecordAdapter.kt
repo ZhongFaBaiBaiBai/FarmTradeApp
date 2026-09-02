@@ -115,40 +115,49 @@ class RecordAdapter(
         val b = holder.binding
         when (item) {
             is ListItem.DateHeader -> {
-                // 日期头：最外层，隐藏箭头，不可折叠
+                // ===== 日期头：最外层，最大最醒目 =====
                 b.tvGroupName.text = item.date
-                b.tvGroupName.textSize = 18f
+                b.tvGroupName.textSize = 22f
                 b.tvGroupName.setTextColor(0xFF1B5E20.toInt()) // 深绿
                 b.tvCount.text = "${item.count}条"
+                b.tvCount.textSize = 15f
                 b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
+                b.tvSubtotal.textSize = 20f
+                b.tvSubtotal.setTextColor(0xFF1B5E20.toInt())
                 b.root.setBackgroundColor(0xFFFFFFFF.toInt())
                 b.ivArrow.visibility = View.GONE
-                b.root.setPadding(14, 16, 14, 12)
+                b.root.setPadding(16, 20, 16, 14)
                 b.root.setOnClickListener(null)
             }
             is ListItem.TypeHeader -> {
-                // 类型头：隐藏箭头，不可折叠，永远展开
+                // ===== 类型头：次级醒目，浅绿背景区分 =====
                 b.tvGroupName.text = item.type
-                b.tvGroupName.textSize = 16f
-                b.tvGroupName.setTextColor(holder.itemView.context.getColor(R.color.green_primary))
+                b.tvGroupName.textSize = 20f
+                b.tvGroupName.setTextColor(0xFF2E7D32.toInt())
                 b.tvCount.text = "${item.count}条"
+                b.tvCount.textSize = 14f
                 b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
+                b.tvSubtotal.textSize = 18f
+                b.tvSubtotal.setTextColor(0xFF2E7D32.toInt())
                 b.root.setBackgroundColor(0xFFF1F8E9.toInt())
                 b.ivArrow.visibility = View.GONE
-                b.root.setPadding(28, 12, 14, 10)
+                b.root.setPadding(28, 16, 16, 12)
                 b.root.setOnClickListener(null)
             }
             is ListItem.PriceHeader -> {
-                // 单价头：显示箭头，可折叠
+                // ===== 单价头：最细层级，不显示折叠图标 =====
                 b.tvGroupName.text = "${Record.formatNumber(item.unitPrice)}元/${item.priceUnit}"
-                b.tvGroupName.textSize = 15f
+                b.tvGroupName.textSize = 17f
                 b.tvGroupName.setTextColor(0xFF558B2F.toInt())
                 b.tvCount.text = "${item.count}条"
+                b.tvCount.textSize = 14f
                 b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
-                b.root.setBackgroundColor(0xFFFFFFFE.toInt()) // 接近白色
-                b.ivArrow.visibility = View.VISIBLE
-                b.ivArrow.text = if (isCollapsed("PRICE:${item.type}|${item.unitPrice}")) "▶" else "▼"
-                b.root.setPadding(48, 10, 14, 10)
+                b.tvSubtotal.textSize = 17f
+                b.tvSubtotal.setTextColor(0xFF558B2F.toInt())
+                b.root.setBackgroundColor(0xFFFFFFFE.toInt())
+                b.ivArrow.visibility = View.GONE
+                b.root.setPadding(48, 14, 16, 14)
+                // 保留点击折叠功能，但视觉上不显示箭头
                 b.root.setOnClickListener {
                     toggleCollapse("PRICE:${item.type}|${item.unitPrice}")
                 }
