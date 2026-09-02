@@ -47,6 +47,26 @@ jobs:
     - name: 创建 local.properties
       run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
+    - name: 缓存 debug keystore（保证每次构建签名一致，可覆盖安装）
+      uses: actions/cache@v4
+      with:
+        path: app/debug.keystore
+        key: android-debug-keystore-v1
+
+    - name: 准备固定签名 keystore
+      run: |
+        if [ ! -f app/debug.keystore ]; then
+          keytool -genkeypair -v \
+            -keystore app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+          echo "✅ 生成了新的 debug.keystore（首次构建）"
+        else
+          echo "✅ debug.keystore 已存在（来自缓存）"
+        fi
+
     - name: 下载 Vosk 语音模型（打包进 APK）
       run: |
         MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip"

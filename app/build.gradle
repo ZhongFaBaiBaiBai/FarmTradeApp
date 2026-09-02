@@ -8,6 +8,16 @@ android {
     namespace 'com.farmtrade.app'
     compileSdk 34
 
+    // 固定签名配置（debug.keystore 由 GitHub Actions 生成并缓存，保证每次构建签名一致）
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     defaultConfig {
         applicationId "com.farmtrade.app"
         minSdk 24
@@ -17,7 +27,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
+            signingConfig signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
