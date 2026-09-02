@@ -47,6 +47,9 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     /** 搜索关键词（按日期筛选，如 "2025-08" 或 "2025-08-15" 或 "08-15"） */
     private var searchQuery: String? = null
 
+    /** 排序模式 */
+    private var sortMode: Int = SORT_TIME_DESC
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -64,6 +67,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         setupFab()
         setupBatchManage()
         setupSearch()
+        setupSort()
         loadRecords()
     }
 
@@ -125,6 +129,28 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
                     applyFilter()
                 }
                 .setNegativeButton("取消", null)
+                .show()
+        }
+    }
+
+    // ==================== 排序 ====================
+
+    private fun setupSort() {
+        binding.ivSort.setOnClickListener {
+            val modes = arrayOf(
+                "默认（按时间倒序）",
+                "按类型分组 + 单价降序",
+                "按类型分组 + 单价升序"
+            )
+            val labels = arrayOf("时间", "类型+单价↓", "类型+单价↑")
+            AlertDialog.Builder(requireContext())
+                .setTitle("排序方式")
+                .setSingleChoiceItems(modes, sortMode) { dialog, which ->
+                    sortMode = which
+                    applyFilter()
+                    dialog.dismiss()
+                    Toast.makeText(requireContext(), "已切换排序: ${labels[which]}", Toast.LENGTH_SHORT).show()
+                }
                 .show()
         }
     }
@@ -213,11 +239,22 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         }
         // 搜索过滤：支持 yyyy-MM / yyyy-MM-dd / M-d / MM-dd 等格式
         searchQuery?.let { q ->
-            // 把用户输入标准化：补前导零（如 "8-5" → "08-05"，"2025-8-15" → "2025-08-15"）
             val normalized = normalizeSearchQuery(q)
             filtered = filtered.filter { record ->
                 record.dateTime.contains(normalized) || record.dateTime.contains(q)
             }
+        }
+        // 排序
+        filtered = when (sortMode) {
+            SORT_TYPE_THEN_PRICE_DESC -> filtered
+                .sortedWith(compareByDescending<Record> { it.type }
+                    .thenByDescending { it.unitPrice }
+                    .thenByDescending { it.dateTime })
+            SORT_TYPE_THEN_PRICE_ASC -> filtered
+                .sortedWith(compareByDescending<Record> { it.type }
+                    .thenBy { it.unitPrice }
+                    .thenByDescending { it.dateTime })
+            else -> filtered  // 默认：allRecords 已经是按时间倒序
         }
         adapter.updateData(filtered)
     }
@@ -332,6 +369,10 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         private const val FILTER_SELL = 2
         private const val FILTER_TODAY = 3
         private const val FILTER_MONTH = 4
+
+        private const val SORT_TIME_DESC = 0
+        private const val SORT_TYPE_THEN_PRICE_DESC = 1
+        private const val SORT_TYPE_THEN_PRICE_ASC = 2
 
         private const val REQ_ADD_RECORD = 1001
         private const val REQ_QUICK_RECORD = 1002

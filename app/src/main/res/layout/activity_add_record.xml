@@ -36,8 +36,23 @@
             android:textColor="#ffffff"
             android:textSize="20sp"
             android:textStyle="bold"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/btnSave"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:minWidth="72dp"
+            android:text="保存"
+            android:textColor="#2e7d32"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:background="@android:drawable/btn_default"
+            android:backgroundTint="#ffffff"
             android:gravity="center"
-            android:layout_marginStart="-32dp" />
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?android:attr/selectableItemBackground" />
     </LinearLayout>
 
     <ScrollView
@@ -541,16 +556,6 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- Save button (green, large) -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSave"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="保存记录"
-                android:textSize="20sp"
-                android:textColor="#ffffff"
-                app:backgroundTint="#2e7d32"
-                app:cornerRadius="12dp" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

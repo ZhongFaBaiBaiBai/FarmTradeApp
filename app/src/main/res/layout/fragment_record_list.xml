@@ -90,6 +90,18 @@
                 android:focusable="true"
                 android:foreground="?android:attr/selectableItemBackground"
                 app:tint="#ffffff" />
+
+            <ImageView
+                android:id="@+id/ivSort"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:src="@android:drawable/ic_menu_sort_by_size"
+                android:contentDescription="排序"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground"
+                app:tint="#ffffff" />
     </LinearLayout>
 
         <!-- Filter chips horizontal scroll -->
