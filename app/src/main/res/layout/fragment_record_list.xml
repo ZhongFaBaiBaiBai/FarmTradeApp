@@ -86,8 +86,11 @@
                 android:layout_height="32dp"
                 android:src="@android:drawable/ic_menu_search"
                 android:contentDescription="搜索"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground"
                 app:tint="#ffffff" />
-        </LinearLayout>
+    </LinearLayout>
 
         <!-- Filter chips horizontal scroll -->
         <HorizontalScrollView

@@ -44,6 +44,9 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     /** 当前选中的过滤类型 */
     private var currentFilter: Int = FILTER_ALL
 
+    /** 搜索关键词（按日期筛选，如 "2025-08" 或 "2025-08-15" 或 "08-15"） */
+    private var searchQuery: String? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -60,6 +63,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         setupFilterChips()
         setupFab()
         setupBatchManage()
+        setupSearch()
         loadRecords()
     }
 
@@ -92,6 +96,37 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
     private fun setupFab() {
         binding.fabAdd.setOnClickListener { showQuickAddDialog() }
+    }
+
+    // ==================== 搜索 ====================
+
+    private fun setupSearch() {
+        binding.ivSearch.setOnClickListener {
+            val edit = android.widget.EditText(requireContext())
+            edit.hint = "输入日期，如 2025-08 或 8-15"
+            edit.inputType = android.text.InputType.TYPE_CLASS_TEXT
+            edit.setText(searchQuery ?: "")
+            edit.selectAll()
+            val container = android.widget.FrameLayout(requireContext()).apply {
+                val pad = (16 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad, pad, pad)
+                addView(edit)
+            }
+            AlertDialog.Builder(requireContext())
+                .setTitle(if (searchQuery != null) "搜索（当前: $searchQuery）" else "按日期搜索")
+                .setMessage("可输入:\n• 2025-08 → 某月\n• 2025-08-15 → 某天\n• 08-15 → 某天(任意年份)")
+                .setView(container)
+                .setPositiveButton("搜索") { _, _ ->
+                    searchQuery = edit.text.toString().trim().ifEmpty { null }
+                    applyFilter()
+                }
+                .setNeutralButton("清除") { _, _ ->
+                    searchQuery = null
+                    applyFilter()
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        }
     }
 
     // ==================== 批量管理 ====================
@@ -169,12 +204,20 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     private fun applyFilter() {
         val today = dateStr("yyyy-MM-dd")
         val month = dateStr("yyyy-MM")
-        val filtered: List<Record> = when (currentFilter) {
+        var filtered: List<Record> = when (currentFilter) {
             FILTER_BUY -> allRecords.filter { it.direction == "买入" }
             FILTER_SELL -> allRecords.filter { it.direction == "卖出" }
             FILTER_TODAY -> allRecords.filter { it.dateTime.startsWith(today) }
             FILTER_MONTH -> allRecords.filter { it.dateTime.startsWith(month) }
             else -> allRecords
+        }
+        // 搜索过滤：支持 yyyy-MM / yyyy-MM-dd / M-d / MM-dd 等格式
+        searchQuery?.let { q ->
+            // 把用户输入标准化：补前导零（如 "8-5" → "08-05"，"2025-8-15" → "2025-08-15"）
+            val normalized = normalizeSearchQuery(q)
+            filtered = filtered.filter { record ->
+                record.dateTime.contains(normalized) || record.dateTime.contains(q)
+            }
         }
         adapter.updateData(filtered)
     }
@@ -275,6 +318,13 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
     private fun dateStr(pattern: String): String =
         SimpleDateFormat(pattern, Locale.getDefault()).format(Date())
+
+    /** 把 "8-5" → "08-05"，"2025-8-15" → "2025-08-15" */
+    private fun normalizeSearchQuery(q: String): String {
+        return q.split("-").joinToString("-") { part ->
+            part.trim().padStart(2, '0')
+        }
+    }
 
     companion object {
         private const val FILTER_ALL = 0
