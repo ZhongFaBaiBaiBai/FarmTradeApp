@@ -83,15 +83,19 @@
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
-            <!-- Date time field (readonly) -->
+            <!-- Date time field (now clickable → 滚轮+文本双入口弹窗) -->
             <LinearLayout
+                android:id="@+id/rowDateTime"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
                 android:background="#ffffff"
                 android:padding="14dp"
-                android:layout_marginBottom="12dp">
+                android:layout_marginBottom="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -279,6 +283,23 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:visibility="visible">
+
+                <!-- 一次识别多个字段的快捷入口 -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPhotoAllFields"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginBottom="10dp"
+                    android:text="📷 拍整张记录本：自动识别总重/车重/单价"
+                    android:textColor="#1565c0"
+                    android:textSize="14sp"
+                    app:strokeColor="#1565c0"
+                    app:cornerRadius="8dp"
+                    app:icon="@android:drawable/ic_menu_camera"
+                    app:iconTint="#1565c0"
+                    app:iconGravity="textStart"
+                    app:iconPadding="6dp" />
 
                 <!-- 总重 + 车重 row -->
                 <LinearLayout
