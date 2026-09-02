@@ -16,6 +16,7 @@ import com.farmtrade.app.util.OcrHelper
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -34,6 +35,8 @@ class LedgerReviewActivity : AppCompatActivity() {
 
     private var currentDirection = "买入"
     private var measureMode = Record.MODE_WEIGHT_KG
+    private val dateTimeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+    private var batchDateTime: String = dateTimeFmt.format(Date())
 
     /** 行视图持有者，保存时按顺序读取输入框内容 */
     private class RowHolder(
@@ -62,6 +65,16 @@ class LedgerReviewActivity : AppCompatActivity() {
         }
         binding.toggleDirection.check(binding.btnBuy.id)
         binding.toggleUnit.check(binding.btnUnitKg.id)
+
+        // 日期时间显示当前值，点击弹双入口弹窗（文本输入 + 滚轮选）
+        binding.tvDateTime.text = batchDateTime
+        binding.rowDateTime.setOnClickListener {
+            DatePickerDialogs.open(this, batchDateTime) { picked ->
+                batchDateTime = picked
+                binding.tvDateTime.text = picked
+                toast("日期已设为 $picked")
+            }
+        }
 
         binding.toggleDirection.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
@@ -176,11 +189,18 @@ class LedgerReviewActivity : AppCompatActivity() {
         }
 
         val unitName = if (measureMode == Record.MODE_WEIGHT_KG) "公斤" else "斤"
-        val base = System.currentTimeMillis()
+        // 解析用户选的起始日期时间，每条递增 1 分钟
+        val baseCal = Calendar.getInstance().apply {
+            try {
+                time = dateTimeFmt.parse(batchDateTime) ?: Date()
+            } catch (_: Exception) { /* 用当前时间兜底 */ }
+        }
         val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         checks.forEachIndexed { i, row ->
             val r = Record().apply {
-                dateTime = fmt.format(Date(base + i * 60_000L))
+                val cal = baseCal.clone() as Calendar
+                cal.add(Calendar.MINUTE, i)
+                dateTime = fmt.format(cal.time)
                 direction = currentDirection
                 this.type = type
                 this.measureMode = this@LedgerReviewActivity.measureMode
