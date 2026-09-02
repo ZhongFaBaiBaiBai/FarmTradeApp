@@ -2,6 +2,7 @@ package com.farmtrade.app.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -39,6 +40,9 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     private lateinit var databaseHelper: DatabaseHelper
     private lateinit var adapter: RecordAdapter
 
+    /** SharedPreferences 持久化用户偏好（排序/筛选/汇总范围） */
+    private lateinit var sp: SharedPreferences
+
     /** 全部记录（未过滤，按时间倒序） */
     private var allRecords: List<Record> = emptyList()
 
@@ -73,6 +77,13 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         databaseHelper = DatabaseHelper(requireContext())
+
+        // 读取持久化偏好
+        sp = requireContext().getSharedPreferences(PREFS_NAME, 0)
+        sortMode = sp.getInt(KEY_SORT, SORT_TIME_DESC)
+        tradeFilter = sp.getInt(KEY_TRADE, TRADE_ALL)
+        summaryRange = sp.getInt(KEY_SUMMARY, SUMMARY_TODAY)
+
         setupRecyclerView()
         setupTradeFilter()
         setupDateRangeFilter()
@@ -81,7 +92,37 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         setupBatchManage()
         setupSearch()
         setupSort()
+
+        // 恢复 ChipGroup 选中
+        restoreChipSelection()
+
         loadRecords()
+    }
+
+    /** 恢复 ChipGroup 选中状态（setupTradeFilter 里的 setOnCheckedChangeListener 会触发 applyFilter，
+     * 但因为 loadRecords 尚未执行，所以先 restore 再 loadRecords） */
+    private fun restoreChipSelection() {
+        val chipId = when (tradeFilter) {
+            TRADE_BUY -> R.id.chipBuy
+            TRADE_SELL -> R.id.chipSell
+            else -> R.id.chipAll
+        }
+        // 临时移除 listener，避免触发 applyFilter（此时 allRecords 还空）
+        binding.chipGroupFilter.setOnCheckedChangeListener(null)
+        binding.chipGroupFilter.check(chipId)
+        // 恢复 listener
+        setupTradeFilter()
+        updateDateFilterChipLabel()
+        updateSummaryRangeUI()
+    }
+
+    /** 保存偏好：排序/交易方向/汇总范围 */
+    private fun savePrefs() {
+        sp.edit()
+            .putInt(KEY_SORT, sortMode)
+            .putInt(KEY_TRADE, tradeFilter)
+            .putInt(KEY_SUMMARY, summaryRange)
+            .apply()
     }
 
     override fun onDestroyView() {
@@ -105,6 +146,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
                 R.id.chipSell -> TRADE_SELL
                 else -> TRADE_ALL
             }
+            savePrefs()
             applyFilter()
         }
     }
@@ -128,6 +170,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
                 .setTitle("选择汇总范围")
                 .setSingleChoiceItems(arrayOf("今日", "本月", "本季", "本年"), idx) { dialog, which ->
                     summaryRange = values[which]
+                    savePrefs()
                     updateSummaryRangeUI()
                     updateSummary()
                     dialog.dismiss()
@@ -295,6 +338,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
                 .setTitle("排序方式")
                 .setSingleChoiceItems(modes, sortMode) { dialog, which ->
                     sortMode = which
+                    savePrefs()
                     applyFilter()
                     dialog.dismiss()
                     Toast.makeText(requireContext(), "已切换排序: ${labels[which]}", Toast.LENGTH_SHORT).show()
@@ -605,6 +649,12 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     }
 
     companion object {
+        // SharedPreferences
+        private const val PREFS_NAME = "record_list_prefs"
+        private const val KEY_SORT = "sort_mode"
+        private const val KEY_TRADE = "trade_filter"
+        private const val KEY_SUMMARY = "summary_range"
+
         // 交易方向筛选
         private const val TRADE_ALL = 0
         private const val TRADE_BUY = 1
