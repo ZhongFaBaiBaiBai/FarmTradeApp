@@ -1,6 +1,8 @@
 package com.farmtrade.app.ui
 
 import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -26,6 +28,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -421,17 +424,16 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
             showToast("记录尚未生成")
             return
         }
+        // 日期时间改用滚轮选择器，不走文本输入框
+        if (field == EditField.DATETIME) {
+            openDateTimePicker()
+            return
+        }
         val dv = DialogInlineEditBinding.inflate(layoutInflater)
         dv.tvFieldLabel.text = "编辑：${fieldLabel(field)}"
         dv.etInput.setText(fieldCurrentValue(field))
         dv.etInput.inputType = fieldInputType(field)
         dv.tvHint.text = fieldHint(field)
-
-        // 日期时间没有拍照/语音辅助按钮
-        if (field == EditField.DATETIME) {
-            dv.btnRetakePhoto.visibility = View.GONE
-            dv.btnVoiceEdit.visibility = View.GONE
-        }
 
         val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
 
@@ -457,6 +459,50 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
             dialog.dismiss()
         }
         dialog.show()
+    }
+
+    /**
+     * 日期时间滚轮选择器：先弹 DatePicker 选日期，再弹 TimePicker 选时间，
+     * 拼成 "yyyy-MM-dd HH:mm" 写回 _pendingRecord.dateTime。
+     * 比文本输入框更直观，也避免 TextInputEditText 切 inputType 后无法编辑的兼容性问题。
+     */
+    private fun openDateTimePicker() {
+        val cal = Calendar.getInstance()
+        try {
+            // 解析当前记录里的日期时间作为初始值
+            val parsed = dateTimeFormat.parse(_pendingRecord.dateTime)
+            if (parsed != null) cal.time = parsed
+        } catch (e: Exception) {
+            // 解析失败就用当前时间，不中断流程
+        }
+
+        DatePickerDialog(
+            this,
+            { _, year, month, day ->
+                // 记住选中的日期，继续弹时间选择器
+                TimePickerDialog(
+                    this,
+                    { _, hour, minute ->
+                        val cal2 = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, year)
+                            set(Calendar.MONTH, month)
+                            set(Calendar.DAY_OF_MONTH, day)
+                            set(Calendar.HOUR_OF_DAY, hour)
+                            set(Calendar.MINUTE, minute)
+                        }
+                        _pendingRecord.dateTime = dateTimeFormat.format(cal2.time)
+                        doRecalcAndRender()
+                        showToast("日期时间已更新")
+                    },
+                    cal.get(Calendar.HOUR_OF_DAY),
+                    cal.get(Calendar.MINUTE),
+                    true
+                ).show()
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
     }
 
     private fun fieldLabel(field: EditField): String = when (field) {
