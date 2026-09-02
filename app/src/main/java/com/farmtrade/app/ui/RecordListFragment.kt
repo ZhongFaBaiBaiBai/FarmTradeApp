@@ -140,10 +140,12 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         binding.ivSort.setOnClickListener {
             val modes = arrayOf(
                 "默认（按时间倒序）",
-                "按类型分组 + 单价降序",
-                "按类型分组 + 单价升序"
+                "类型→单价分组（单价↓）",
+                "类型→单价分组（单价↑）",
+                "日期→类型→单价分组（单价↓）",
+                "日期→类型→单价分组（单价↑）"
             )
-            val labels = arrayOf("时间", "类型+单价↓", "类型+单价↑")
+            val labels = arrayOf("时间", "类型↓", "类型↑", "日期↓", "日期↑")
             AlertDialog.Builder(requireContext())
                 .setTitle("排序方式")
                 .setSingleChoiceItems(modes, sortMode) { dialog, which ->
@@ -247,8 +249,10 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         }
         // 排序
         when (sortMode) {
-            SORT_TYPE_THEN_PRICE_DESC -> adapter.updateGrouped(filtered, priceDesc = true)
-            SORT_TYPE_THEN_PRICE_ASC -> adapter.updateGrouped(filtered, priceDesc = false)
+            SORT_TYPE_PRICE_DESC -> adapter.updateGroupedByType(filtered, priceDesc = true)
+            SORT_TYPE_PRICE_ASC -> adapter.updateGroupedByType(filtered, priceDesc = false)
+            SORT_DATE_TYPE_PRICE_DESC -> adapter.updateGroupedByDate(filtered, priceDesc = true)
+            SORT_DATE_TYPE_PRICE_ASC -> adapter.updateGroupedByDate(filtered, priceDesc = false)
             else -> {
                 // 默认时间倒序
                 val sorted = filtered.sortedByDescending { it.dateTime }
@@ -369,8 +373,10 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         private const val FILTER_MONTH = 4
 
         private const val SORT_TIME_DESC = 0
-        private const val SORT_TYPE_THEN_PRICE_DESC = 1
-        private const val SORT_TYPE_THEN_PRICE_ASC = 2
+        private const val SORT_TYPE_PRICE_DESC = 1
+        private const val SORT_TYPE_PRICE_ASC = 2
+        private const val SORT_DATE_TYPE_PRICE_DESC = 3
+        private const val SORT_DATE_TYPE_PRICE_ASC = 4
 
         private const val REQ_ADD_RECORD = 1001
         private const val REQ_QUICK_RECORD = 1002
