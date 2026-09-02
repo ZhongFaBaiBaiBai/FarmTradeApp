@@ -151,6 +151,10 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
             dialog.dismiss()
             startQuickRecord(Record.SOURCE_VOICE)
         }
+        sheetBinding.btnLedgerRecord.setOnClickListener {
+            dialog.dismiss()
+            startQuickRecord(QuickRecordActivity.EXTRA_MODE_LEDGER)
+        }
         sheetBinding.btnManualRecord.setOnClickListener {
             dialog.dismiss()
             startActivityForResult(

@@ -53,9 +53,7 @@ class AddRecordActivity : AppCompatActivity() {
     private var selectedType = ""
     private var measureMode = Record.MODE_WEIGHT_KG
 
-    /** 0 = 单字段拍照（总重/车重各拍一张）, 1 = 多字段拍照（整张记录本一次识别总重/车重/单价） */
-    private var currentPhotoMode = 0
-    /** 0 = 总重, 1 = 车重 —— 单字段模式下标记当前拍照识别的目标输入框 */
+    /** 0 = 总重, 1 = 车重 —— 标记当前拍照识别的目标输入框 */
     private var currentPhotoTarget = 0
     private var cameraImageUri: Uri? = null
 
@@ -190,7 +188,6 @@ class AddRecordActivity : AppCompatActivity() {
         // 6. 拍照识别
         binding.btnPhotoGross.setOnClickListener { requestCameraFor(0) }      // 单字段：总重
         binding.btnPhotoTare.setOnClickListener { requestCameraFor(1) }     // 单字段：车重
-        binding.btnPhotoAllFields.setOnClickListener { requestCameraForAll() }  // 多字段：总重+车重+单价一次识别
 
         // 7. 顶部语音输入条（点击开始/停止录音）
         binding.layoutVoiceInput.setOnClickListener { requestAudioPermissionAndStart() }
@@ -317,19 +314,7 @@ class AddRecordActivity : AppCompatActivity() {
     // ==================== 拍照 OCR ====================
 
     private fun requestCameraFor(target: Int) {
-        currentPhotoMode = 0
         currentPhotoTarget = target
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            launchCamera()
-        } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    private fun requestCameraForAll() {
-        currentPhotoMode = 1
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -359,42 +344,14 @@ class AddRecordActivity : AppCompatActivity() {
                 return@launch
             }
 
-            if (currentPhotoMode == 0) {
-                // ====== 单字段模式（旧逻辑：一次识别一个数）======
-                val number = OcrHelper.recognizeFromBitmap(bitmap)
-                if (number != null && number.toDoubleOrNull()?.let { it > 0.0 } == true) {
-                    if (currentPhotoTarget == 0) binding.etGrossWeight.setText(number)
-                    else binding.etTareWeight.setText(number)
-                    toast("识别到：$number")
-                } else {
-                    toast("未识别到有效数字")
-                }
+            // 单字段模式：一次识别一个数（拍总重 / 拍车重各拍一张）
+            val number = OcrHelper.recognizeFromBitmap(bitmap)
+            if (number != null && number.toDoubleOrNull()?.let { it > 0.0 } == true) {
+                if (currentPhotoTarget == 0) binding.etGrossWeight.setText(number)
+                else binding.etTareWeight.setText(number)
+                toast("识别到：$number")
             } else {
-                // ====== 多字段模式（整张记录本：总重 + 车重 + 单价）======
-                val r = OcrHelper.recognizeMultiFields(bitmap)
-                val filled = mutableListOf<String>()
-                r.gross?.let {
-                    if (it.toDoubleOrNull()?.let { v -> v > 0.0 } == true) {
-                        binding.etGrossWeight.setText(it); filled.add("总重=$it")
-                    }
-                }
-                r.tare?.let {
-                    if (it.toDoubleOrNull()?.let { v -> v > 0.0 } == true) {
-                        binding.etTareWeight.setText(it); filled.add("车重=$it")
-                    }
-                }
-                r.price?.let {
-                    if (it.toDoubleOrNull()?.let { v -> v > 0.0 } == true) {
-                        binding.etUnitPrice.setText(it); filled.add("单价=$it")
-                    }
-                }
-                if (filled.isNotEmpty()) {
-                    toast("识别到 ${filled.joinToString(", ")}（可手动改）")
-                } else {
-                    toast("没识别到有效数据，可手动填写")
-                }
-                // 开发者调试：把 OCR 原始文本打 Log，用户如果反馈识别不准可以据此调整关键词
-                android.util.Log.d("AddRecord", "OCR raw: ${r.rawText}")
+                toast("未识别到有效数字")
             }
             recalcNetAndTotal()
         }

@@ -206,6 +206,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
         when (mode) {
             EXTRA_MODE_VOICE -> startVoiceFlow()
+            EXTRA_MODE_LEDGER -> startLedgerFlow()
             else -> startPhotoFlow()
         }
     }
@@ -215,6 +216,12 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private fun startPhotoFlow() {
         cameraForInitial = true
         if (hasCameraPermission()) launchCamera() else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    /** 记录本批量模式：直接进入拍照流程，OCR 后跳转批量确认页 */
+    private fun startLedgerFlow() {
+        binding.tvCarryOverInfo.text = "请拍整本记录本，将自动识别每行「总重-车重」..."
+        startPhotoFlow()
     }
 
     private fun startVoiceFlow() {
@@ -560,6 +567,10 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private fun runOcr(uri: Uri) {
         lifecycleScope.launch {
             val bitmap = OcrHelper.loadBitmap(this@QuickRecordActivity, uri)
+            if (mode == EXTRA_MODE_LEDGER) {
+                handleLedgerOcr(bitmap)
+                return@launch
+            }
             val number = if (bitmap != null) OcrHelper.recognizeFromBitmap(bitmap) else null
             if (number != null) {
                 val value = number.toDoubleOrNull()
@@ -574,6 +585,23 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 if (cameraForInitial && !this@QuickRecordActivity::_pendingRecord.isInitialized) finish()
             }
         }
+    }
+
+    /** 记录本批量：OCR 全部算式 -> 跳转 LedgerReviewActivity（结果回传后结束本页） */
+    private suspend fun handleLedgerOcr(bitmap: android.graphics.Bitmap?) {
+        val rows = if (bitmap != null) OcrHelper.recognizeLedgerRows(bitmap) else emptyList()
+        if (rows.isEmpty()) {
+            showToast("没有识别到「总重-车重」算式，请重拍或改用手动录入")
+            finish()
+            return
+        }
+        val arr = org.json.JSONArray()
+        rows.forEach { row ->
+            arr.put(org.json.JSONObject().put("g", row.gross).put("t", row.tare))
+        }
+        val intent = Intent(this, LedgerReviewActivity::class.java)
+            .putExtra(LedgerReviewActivity.EXTRA_ROWS_JSON, arr.toString())
+        editRecordLauncher.launch(intent)
     }
 
     /**
@@ -634,5 +662,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         const val EXTRA_RECORD_MODE = "extra_record_mode"
         const val EXTRA_MODE_PHOTO = "PHOTO"
         const val EXTRA_MODE_VOICE = "VOICE"
+        /** 拍整本记录本批量录入：拍照 -> OCR 所有"总重-车重"算式 -> LedgerReviewActivity */
+        const val EXTRA_MODE_LEDGER = "LEDGER"
     }
 }

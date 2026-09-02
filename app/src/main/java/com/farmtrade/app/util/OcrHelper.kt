@@ -21,6 +21,7 @@ import kotlin.math.ln
  * - 单字段：[recognizeFromBitmap] 返回一个最可能是重量的数字字符串（兼容旧调用方）。
  * - 多字段：[recognizeMultiFields] 返回 [OcrResult]，按"关键词→减法算式→兜底"三级策略同时识别
  *   总重 / 车重 / 单价，适合整张记录本照片一次识别三个字段。
+ * - 记录本批量：[recognizeLedgerRows] 逐行扫描"总重-车重"算式，一条算式生成一条记录。
  */
 object OcrHelper {
 
@@ -31,6 +32,9 @@ object OcrHelper {
         val price: String? = null,    // 单价
         val rawText: String = ""      // OCR 原始文本，方便用户核对
     )
+
+    /** 记录本批量识别：一行算式 = 一条记录（gross=总重，tare=车重）。 */
+    data class LedgerRow(val gross: Double, val tare: Double)
 
     // ================== 公开入口 ==================
 
@@ -64,6 +68,42 @@ object OcrHelper {
                     if (cont.isActive) cont.resume(OcrResult())
                 }
         }
+
+    /**
+     * 记录本批量：逐行扫描"总重-车重"算式（如 1880-810），一条算式 = 一条记录。
+     * 复杂行（带 ×2、×1.1 等乘法）只取减号前后两个数；识别不准的行由用户在确认列表里删除。
+     */
+    suspend fun recognizeLedgerRows(bitmap: Bitmap): List<LedgerRow> =
+        suspendCancellableCoroutine { cont ->
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    if (cont.isActive) cont.resume(extractLedgerRows(visionText))
+                }
+                .addOnFailureListener {
+                    if (cont.isActive) cont.resume(emptyList())
+                }
+        }
+
+    private fun extractLedgerRows(visionText: Text): List<LedgerRow> {
+        val rows = mutableListOf<LedgerRow>()
+        for (block in visionText.textBlocks) {
+            for (line in block.lines) {
+                val norm = line.text
+                    .replace(" ", "").replace(",", "").replace("，", "")
+                    .replace('–', '-').replace('—', '-').replace('－', '-')
+                val m = subtractionRegex.find(norm) ?: continue
+                val gross = m.groupValues[1].toDoubleOrNull() ?: continue
+                val tare = m.groupValues[2].toDoubleOrNull() ?: continue
+                // 合理性过滤：总重必须大于车重，且数值在记录本常见范围内
+                if (gross <= tare) continue
+                if (gross < 10 || gross > 999999 || tare < 1) continue
+                rows.add(LedgerRow(gross, tare))
+            }
+        }
+        return rows
+    }
 
     /** 为拍照创建临时图片 Uri（经 FileProvider 共享）。 */
     fun createImageUri(context: Context): Uri? {

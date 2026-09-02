@@ -28,6 +28,7 @@
 
         <activity android:name=".ui.AddRecordActivity" android:label="新增记录" />
         <activity android:name=".ui.QuickRecordActivity" android:label="快速记录" />
+        <activity android:name=".ui.LedgerReviewActivity" android:label="记录本批量录入" />
 
         <!-- FileProvider：用于拍照（ActivityResultContracts.TakePicture）共享临时图片 -->
         <provider
