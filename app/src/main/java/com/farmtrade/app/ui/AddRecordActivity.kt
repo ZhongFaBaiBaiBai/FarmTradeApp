@@ -131,10 +131,8 @@ class AddRecordActivity : AppCompatActivity() {
                 toast("日期时间已更新")
             }
         }
-        // 编辑预填 or 默认当前时间
-        if (binding.tvDateTime.text.isNullOrBlank()) {
-            binding.tvDateTime.text = dateTimeFormat.format(Date())
-        }
+        // 先给个默认当前时间（编辑预填或 prefillFromRecord 会覆盖）
+        binding.tvDateTime.text = dateTimeFormat.format(Date())
 
         // 2. 买卖方向
         binding.toggleDirection.addOnButtonCheckedListener { _, checkedId, isChecked ->
