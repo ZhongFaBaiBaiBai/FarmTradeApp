@@ -178,8 +178,8 @@ class LedgerReviewActivity : AppCompatActivity() {
                 dateTime = fmt.format(Date(base + i * 60_000L))
                 direction = currentDirection
                 this.type = type
-                measureMode = this@LedgerReviewActivity.measureMode
-                unitName = unitName
+                this.measureMode = this@LedgerReviewActivity.measureMode
+                this.unitName = unitName
                 grossWeight = row.gross
                 vehicleWeight = row.tare
                 unitPrice = price
