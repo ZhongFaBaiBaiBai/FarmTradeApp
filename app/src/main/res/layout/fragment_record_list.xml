@@ -159,29 +159,21 @@
                     app:chipStrokeWidth="1dp"
                     app:chipCornerRadius="20dp" />
 
+                <!-- 日期范围筛选：点击弹出快捷选 + 自定义 -->
                 <com.google.android.material.chip.Chip
-                    android:id="@+id/chipToday"
+                    android:id="@+id/chipDateFilter"
                     style="@style/Widget.MaterialComponents.Chip.Choice"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="当日"
-                    android:textSize="16sp"
-                    app:chipBackgroundColor="#e8f5e9"
+                    android:text="全部时间 ▼"
+                    android:textSize="15sp"
+                    android:checkable="false"
+                    app:chipBackgroundColor="#ffffff"
                     app:chipStrokeColor="#2e7d32"
                     app:chipStrokeWidth="1dp"
-                    app:chipCornerRadius="20dp" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipMonth"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="本月"
-                    android:textSize="16sp"
-                    app:chipBackgroundColor="#e8f5e9"
-                    app:chipStrokeColor="#2e7d32"
-                    app:chipStrokeWidth="1dp"
-                    app:chipCornerRadius="20dp" />
+                    app:chipCornerRadius="20dp"
+                    android:clickable="true"
+                    android:focusable="true" />
             </com.google.android.material.chip.ChipGroup>
         </HorizontalScrollView>
 
@@ -196,13 +188,22 @@
             android:layout_marginTop="8dp"
             android:padding="16dp">
 
+            <!-- 汇总标题：下拉选择范围 -->
             <TextView
+                android:id="@+id/tvSummaryTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="今日汇总"
+                android:text="今日汇总 ▼"
                 android:textColor="#ffffff"
                 android:textSize="16sp"
                 android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
@@ -219,9 +220,10 @@
                     android:gravity="center">
 
                     <TextView
+                        android:id="@+id/tvBuyLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="当日买入"
+                        android:text="今日买入"
                         android:textColor="#c8e6c9"
                         android:textSize="14sp" />
 
@@ -244,9 +246,10 @@
                     android:gravity="center">
 
                     <TextView
+                        android:id="@+id/tvSellLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="当日卖出"
+                        android:text="今日卖出"
                         android:textColor="#c8e6c9"
                         android:textSize="14sp" />
 
@@ -269,6 +272,7 @@
                     android:gravity="center">
 
                     <TextView
+                        android:id="@+id/tvNetLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="净额"

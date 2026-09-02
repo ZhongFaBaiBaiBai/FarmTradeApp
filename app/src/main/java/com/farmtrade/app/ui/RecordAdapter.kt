@@ -160,29 +160,28 @@ class RecordAdapter(
     private fun bindRecordItem(holder: RecordViewHolder, item: ListItem.RecordItem) {
         val record = item.record
         bindRecord(holder.binding, record)
+        val pos = holder.bindingAdapterPosition
 
-        if (groupedMode) {
-            holder.binding.cbSelect.visibility = View.GONE
-            holder.itemView.setPadding(64, 0, 0, 0)
-            holder.itemView.setOnClickListener { listener.onItemClick(record, holder.bindingAdapterPosition) }
-            holder.itemView.setOnLongClickListener {
-                listener.onItemLongClick(record, holder.bindingAdapterPosition); true
-            }
-        } else if (multiSelectMode) {
-            holder.itemView.setPadding(0, 0, 0, 0)
+        val indentLeft = if (groupedMode) 64 else 0
+
+        if (multiSelectMode) {
+            // 多选模式：无论平铺还是分组，都显示 cbSelect
+            holder.itemView.setPadding(indentLeft, 0, 0, 0)
             holder.binding.cbSelect.visibility = View.VISIBLE
+            holder.binding.cbSelect.setOnCheckedChangeListener(null)
             holder.binding.cbSelect.isChecked = selectedIds.contains(record.id)
-            holder.binding.cbSelect.setOnClickListener { toggleSelection(record.id) }
+            holder.binding.cbSelect.setOnCheckedChangeListener { _, _ -> toggleSelection(record.id) }
             holder.itemView.setOnClickListener { toggleSelection(record.id) }
             holder.itemView.setOnLongClickListener(null)
             holder.itemView.alpha = if (selectedIds.contains(record.id)) 0.6f else 1.0f
         } else {
-            holder.itemView.setPadding(0, 0, 0, 0)
+            // 普通模式
+            holder.itemView.setPadding(indentLeft, 0, 0, 0)
             holder.binding.cbSelect.visibility = View.GONE
             holder.itemView.alpha = 1.0f
-            holder.itemView.setOnClickListener { listener.onItemClick(record, holder.bindingAdapterPosition) }
+            holder.itemView.setOnClickListener { listener.onItemClick(record, pos) }
             holder.itemView.setOnLongClickListener {
-                listener.onItemLongClick(record, holder.bindingAdapterPosition); true
+                listener.onItemLongClick(record, pos); true
             }
         }
     }
@@ -190,6 +189,7 @@ class RecordAdapter(
     // ==================== 更新数据 ====================
 
     fun updateFlat(newRecords: List<Record>) {
+        if (multiSelectMode) { multiSelectMode = false; selectedIds.clear() }
         groupedMode = false
         flatRecords.clear(); flatRecords.addAll(newRecords)
         flatList.clear()
@@ -199,6 +199,7 @@ class RecordAdapter(
 
     /** 两级分组：类型 → 单价 */
     fun updateGroupedByType(newRecords: List<Record>, priceDesc: Boolean = true) {
+        if (multiSelectMode) { multiSelectMode = false; selectedIds.clear() }
         groupedMode = true
         collapsedKeys.clear()
         currentPriceDesc = priceDesc
@@ -209,6 +210,7 @@ class RecordAdapter(
 
     /** 三级分组：日期 → 类型 → 单价 */
     fun updateGroupedByDate(newRecords: List<Record>, priceDesc: Boolean = true) {
+        if (multiSelectMode) { multiSelectMode = false; selectedIds.clear() }
         groupedMode = true
         collapsedKeys.clear()
         currentPriceDesc = priceDesc
@@ -296,13 +298,30 @@ class RecordAdapter(
         }
     }
 
-    // ==================== 多选（仅平铺） ====================
+    // ==================== 多选 ====================
 
-    fun enterMultiSelect() { if (groupedMode) return; multiSelectMode = true; selectedIds.clear(); notifyDataSetChanged(); listener.onSelectionChanged(0) }
+    fun enterMultiSelect() { multiSelectMode = true; selectedIds.clear(); notifyDataSetChanged(); listener.onSelectionChanged(0) }
     fun exitMultiSelect() { multiSelectMode = false; selectedIds.clear(); notifyDataSetChanged(); listener.onSelectionChanged(0) }
-    fun isSelected(): Boolean = multiSelectMode && !groupedMode
-    fun toggleSelection(id: Long) { if (selectedIds.contains(id)) selectedIds.remove(id) else selectedIds.add(id); notifyDataSetChanged(); listener.onSelectionChanged(selectedIds.size) }
-    fun selectAll() { selectedIds.clear(); flatRecords.forEach { selectedIds.add(it.id) }; notifyDataSetChanged(); listener.onSelectionChanged(selectedIds.size) }
+    fun isMultiSelect(): Boolean = multiSelectMode
+    fun toggleSelection(id: Long) {
+        if (selectedIds.contains(id)) selectedIds.remove(id) else selectedIds.add(id)
+        notifyDataSetChanged()
+        listener.onSelectionChanged(selectedIds.size)
+    }
+    /** 全选 / 取消全选 toggle — 如果当前已全选则取消，否则全选 */
+    fun selectAllOrNone() {
+        val allIds = flatRecords.map { it.id }.toSet()
+        if (selectedIds.size >= allIds.size) {
+            // 已全选 → 取消全选
+            selectedIds.clear()
+        } else {
+            selectedIds.clear()
+            selectedIds.addAll(allIds)
+        }
+        notifyDataSetChanged()
+        listener.onSelectionChanged(selectedIds.size)
+    }
+    fun isAllSelected(): Boolean = flatRecords.isNotEmpty() && selectedIds.size >= flatRecords.size
     fun getSelectedIds(): Set<Long> = selectedIds.toSet()
 
     // ==================== 绑定记录 ====================

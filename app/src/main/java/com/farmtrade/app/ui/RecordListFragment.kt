@@ -23,8 +23,8 @@ import java.util.Locale
 /**
  * 买卖记录列表 Fragment。
  *
- * - 顶部绿色标题栏 + 过滤芯片（全部 / 买入 / 卖出 / 当日 / 本月）
- * - 今日汇总卡片：当日买入总额 / 卖出总额 / 净额
+ * - 顶部绿色标题栏 + 过滤芯片（全部 / 买入 / 卖出）+ 日期范围选择器
+ * - 汇总卡片：可切换 今日/本月/本季/本年 的买入总额 / 卖出总额 / 净额
  * - 记录列表 RecyclerView
  * - FloatingActionButton 打开"快速添加"底部弹窗
  *
@@ -42,8 +42,18 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     /** 全部记录（未过滤，按时间倒序） */
     private var allRecords: List<Record> = emptyList()
 
-    /** 当前选中的过滤类型 */
-    private var currentFilter: Int = FILTER_ALL
+    /** 交易方向筛选：全部 / 买入 / 卖出 */
+    private var tradeFilter: Int = TRADE_ALL
+
+    /** 日期范围筛选：RANGE_NONE / TODAY / MONTH / QUARTER / YEAR / CUSTOM */
+    private var dateRangePreset: Int = RANGE_NONE
+
+    /** 自定义日期范围（当 dateRangePreset == RANGE_CUSTOM 时生效），格式 "yyyy-MM-dd" */
+    private var customDateStart: String? = null
+    private var customDateEnd: String? = null
+
+    /** 汇总卡片范围：SUMMARY_TODAY / MONTH / QUARTER / YEAR */
+    private var summaryRange: Int = SUMMARY_TODAY
 
     /** 搜索关键词（按日期筛选，如 "2025-08" 或 "2025-08-15" 或 "08-15"） */
     private var searchQuery: String? = null
@@ -64,7 +74,9 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         super.onViewCreated(view, savedInstanceState)
         databaseHelper = DatabaseHelper(requireContext())
         setupRecyclerView()
-        setupFilterChips()
+        setupTradeFilter()
+        setupDateRangeFilter()
+        setupSummaryRange()
         setupFab()
         setupBatchManage()
         setupSearch()
@@ -85,18 +97,150 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         binding.rvRecordList.adapter = adapter
     }
 
-    private fun setupFilterChips() {
+    private fun setupTradeFilter() {
         binding.chipGroupFilter.setOnCheckedChangeListener { _, checkedId ->
-            currentFilter = when (checkedId) {
-                R.id.chipAll -> FILTER_ALL
-                R.id.chipBuy -> FILTER_BUY
-                R.id.chipSell -> FILTER_SELL
-                R.id.chipToday -> FILTER_TODAY
-                R.id.chipMonth -> FILTER_MONTH
-                else -> FILTER_ALL
+            exitMultiSelectIfActive()
+            tradeFilter = when (checkedId) {
+                R.id.chipBuy -> TRADE_BUY
+                R.id.chipSell -> TRADE_SELL
+                else -> TRADE_ALL
             }
             applyFilter()
         }
+    }
+
+    /** 日期范围筛选 chip：点击弹出预设 + 自定义对话框 */
+    private fun setupDateRangeFilter() {
+        binding.chipDateFilter.setOnClickListener {
+            exitMultiSelectIfActive()
+            showDateRangeDialog()
+        }
+        updateDateFilterChipLabel()
+    }
+
+    /** 汇总卡片标题：点击弹出范围选择 */
+    private fun setupSummaryRange() {
+        binding.tvSummaryTitle.setOnClickListener {
+            val options = arrayOf("今日汇总 ▼", "本月汇总 ▼", "本季汇总 ▼", "本年汇总 ▼")
+            val values = intArrayOf(SUMMARY_TODAY, SUMMARY_MONTH, SUMMARY_QUARTER, SUMMARY_YEAR)
+            val idx = values.indexOf(summaryRange)
+            AlertDialog.Builder(requireContext())
+                .setTitle("选择汇总范围")
+                .setSingleChoiceItems(arrayOf("今日", "本月", "本季", "本年"), idx) { dialog, which ->
+                    summaryRange = values[which]
+                    updateSummaryRangeUI()
+                    updateSummary()
+                    dialog.dismiss()
+                }
+                .show()
+        }
+    }
+
+    /** 更新日期筛选 chip 的文字（显示当前状态） */
+    private fun updateDateFilterChipLabel() {
+        val label = when (dateRangePreset) {
+            RANGE_TODAY -> "今日 ▼"
+            RANGE_MONTH -> "本月 ▼"
+            RANGE_QUARTER -> "本季 ▼"
+            RANGE_YEAR -> "本年 ▼"
+            RANGE_CUSTOM -> {
+                val s = customDateStart ?: ""
+                val e = customDateEnd ?: ""
+                if (s.isNotEmpty() && e.isNotEmpty()) "$s ~ $e ▼" else "全部时间 ▼"
+            }
+            else -> "全部时间 ▼"
+        }
+        binding.chipDateFilter.text = label
+    }
+
+    /** 更新汇总卡片标题和方向标签文字 */
+    private fun updateSummaryRangeUI() {
+        val (title, buyLabel, sellLabel) = when (summaryRange) {
+            SUMMARY_MONTH -> Triple("本月汇总 ▼", "本月买入", "本月卖出")
+            SUMMARY_QUARTER -> Triple("本季汇总 ▼", "本季买入", "本季卖出")
+            SUMMARY_YEAR -> Triple("本年汇总 ▼", "本年买入", "本年卖出")
+            else -> Triple("今日汇总 ▼", "今日买入", "今日卖出")
+        }
+        binding.tvSummaryTitle.text = title
+        binding.tvBuyLabel.text = buyLabel
+        binding.tvSellLabel.text = sellLabel
+    }
+
+    /** 日期范围选择对话框 */
+    private fun showDateRangeDialog() {
+        val currentIdx = when (dateRangePreset) {
+            RANGE_NONE -> 0
+            RANGE_TODAY -> 1
+            RANGE_MONTH -> 2
+            RANGE_QUARTER -> 3
+            RANGE_YEAR -> 4
+            RANGE_CUSTOM -> 5
+            else -> 0
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("日期范围筛选")
+            .setSingleChoiceItems(
+                arrayOf("全部时间", "今日", "本月", "本季", "本年", "自定义范围..."),
+                currentIdx
+            ) { dialog, which ->
+                when (which) {
+                    0 -> { dateRangePreset = RANGE_NONE; customDateStart = null; customDateEnd = null }
+                    1 -> { dateRangePreset = RANGE_TODAY; customDateStart = null; customDateEnd = null }
+                    2 -> { dateRangePreset = RANGE_MONTH; customDateStart = null; customDateEnd = null }
+                    3 -> { dateRangePreset = RANGE_QUARTER; customDateStart = null; customDateEnd = null }
+                    4 -> { dateRangePreset = RANGE_YEAR; customDateStart = null; customDateEnd = null }
+                    5 -> {
+                        dialog.dismiss()
+                        showCustomDateRangeDialog()
+                        return@setSingleChoiceItems
+                    }
+                }
+                updateDateFilterChipLabel()
+                applyFilter()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    /** 自定义日期范围：两个 DatePickerDialog */
+    private fun showCustomDateRangeDialog() {
+        val calendar = java.util.Calendar.getInstance()
+        val today = dateStr("yyyy-MM-dd")
+
+        // 先选开始日期
+        val startPicker = android.app.DatePickerDialog(
+            requireContext(),
+            { _, y, m, d ->
+                customDateStart = "%04d-%02d-%02d".format(y, m + 1, d)
+                // 再选结束日期
+                android.app.DatePickerDialog(
+                    requireContext(),
+                    { _, y2, m2, d2 ->
+                        customDateEnd = "%04d-%02d-%02d".format(y2, m2 + 1, d2)
+                        // 确保 start <= end
+                        val s = customDateStart!!
+                        val e = customDateEnd!!
+                        if (s > e) {
+                            customDateStart = e; customDateEnd = s
+                        }
+                        dateRangePreset = RANGE_CUSTOM
+                        updateDateFilterChipLabel()
+                        applyFilter()
+                    },
+                    calendar.get(java.util.Calendar.YEAR),
+                    calendar.get(java.util.Calendar.MONTH),
+                    calendar.get(java.util.Calendar.DAY_OF_MONTH)
+                ).apply {
+                    setTitle("选择结束日期（含）")
+                    show()
+                }
+            },
+            calendar.get(java.util.Calendar.YEAR),
+            calendar.get(java.util.Calendar.MONTH),
+            calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        )
+        startPicker.setTitle("选择开始日期（含）")
+        startPicker.show()
     }
 
     private fun setupFab() {
@@ -138,6 +282,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
     private fun setupSort() {
         binding.ivSort.setOnClickListener {
+            exitMultiSelectIfActive()
             val modes = arrayOf(
                 "默认（按时间倒序）",
                 "类型→单价分组（单价↓）",
@@ -162,7 +307,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
     private fun setupBatchManage() {
         binding.btnBatchManage.setOnClickListener {
-            if (adapter.isSelected()) {
+            if (adapter.isMultiSelect()) {
                 adapter.exitMultiSelect()
                 showNormalMode()
             } else {
@@ -171,7 +316,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
             }
         }
         binding.btnSelectAll.setOnClickListener {
-            adapter.selectAll()
+            adapter.selectAllOrNone()
         }
         binding.btnBatchDelete.setOnClickListener {
             val ids = adapter.getSelectedIds()
@@ -217,6 +362,16 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         binding.tvSelectedCount.text = "已选 $selectedCount 条"
         binding.btnBatchDelete.isEnabled = selectedCount > 0
         binding.btnBatchDelete.alpha = if (selectedCount > 0) 1.0f else 0.4f
+        // 全选按钮文字 toggle
+        binding.btnSelectAll.text = if (adapter.isAllSelected()) "取消全选" else "全选"
+    }
+
+    /** 切换排序/过滤前退出多选，保持 UI 和数据一致 */
+    private fun exitMultiSelectIfActive() {
+        if (adapter.isMultiSelect()) {
+            adapter.exitMultiSelect()
+            showNormalMode()
+        }
     }
 
     // ==================== 数据加载与过滤 ====================
@@ -227,19 +382,18 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     fun loadRecords() {
         allRecords = databaseHelper.getAllRecords()
         applyFilter()
-        updateTodaySummary()
+        updateSummary()
     }
 
     private fun applyFilter() {
-        val today = dateStr("yyyy-MM-dd")
-        val month = dateStr("yyyy-MM")
-        var filtered: List<Record> = when (currentFilter) {
-            FILTER_BUY -> allRecords.filter { it.direction == "买入" }
-            FILTER_SELL -> allRecords.filter { it.direction == "卖出" }
-            FILTER_TODAY -> allRecords.filter { it.dateTime.startsWith(today) }
-            FILTER_MONTH -> allRecords.filter { it.dateTime.startsWith(month) }
+        // 交易方向筛选
+        var filtered = when (tradeFilter) {
+            TRADE_BUY -> allRecords.filter { it.direction == "买入" }
+            TRADE_SELL -> allRecords.filter { it.direction == "卖出" }
             else -> allRecords
         }
+        // 日期范围筛选
+        filtered = filtered.filter { record -> isInDateRange(record.dateTime) }
         // 搜索过滤：支持 yyyy-MM / yyyy-MM-dd / M-d / MM-dd 等格式
         searchQuery?.let { q ->
             val normalized = normalizeSearchQuery(q)
@@ -261,13 +415,25 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         }
     }
 
-    private fun updateTodaySummary() {
-        val today = dateStr("yyyy-MM-dd")
-        val todayRecords = allRecords.filter { it.dateTime.startsWith(today) }
+    /** 判断 dateTime (yyyy-MM-dd HH:mm:ss) 是否在当前日期范围内 */
+    private fun isInDateRange(dateTime: String): Boolean {
+        if (dateRangePreset == RANGE_NONE) return true
+        val datePart = dateTime.substringBefore(' ') // yyyy-MM-dd
+        val (start, end) = getDateRangeBounds(dateRangePreset, customDateStart, customDateEnd)
+        return datePart >= start && datePart <= end
+    }
+
+    /** 汇总卡片：按 summaryRange 计算买入/卖出/净额 */
+    private fun updateSummary() {
+        val (start, end) = getSummaryRangeBounds(summaryRange)
+        val records = allRecords.filter { record ->
+            val datePart = record.dateTime.substringBefore(' ')
+            datePart >= start && datePart <= end
+        }
 
         var buyTotal = 0.0
         var sellTotal = 0.0
-        todayRecords.forEach { r ->
+        records.forEach { r ->
             when (r.direction) {
                 "买入" -> buyTotal += r.totalAmount
                 "卖出" -> sellTotal += r.totalAmount
@@ -365,13 +531,100 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         }
     }
 
-    companion object {
-        private const val FILTER_ALL = 0
-        private const val FILTER_BUY = 1
-        private const val FILTER_SELL = 2
-        private const val FILTER_TODAY = 3
-        private const val FILTER_MONTH = 4
+    /**
+     * 获取日期范围的 start/end (yyyy-MM-dd)，用于列表筛选。
+     * 当 preset == RANGE_CUSTOM 时使用 customStart/customEnd。
+     */
+    private fun getDateRangeBounds(
+        preset: Int,
+        customStart: String?,
+        customEnd: String?
+    ): Pair<String, String> {
+        val cal = java.util.Calendar.getInstance()
+        val today = dateStr("yyyy-MM-dd")
+        return when (preset) {
+            RANGE_TODAY -> Pair(today, today)
+            RANGE_MONTH -> {
+                val firstDay = cal.apply { set(java.util.Calendar.DAY_OF_MONTH, 1) }
+                    .time.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it) }
+                val lastDay = cal.apply {
+                    set(java.util.Calendar.DAY_OF_MONTH,
+                        cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH))
+                }.time.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it) }
+                Pair(firstDay, lastDay)
+            }
+            RANGE_QUARTER -> getQuarterRangeBounds(cal)
+            RANGE_YEAR -> {
+                val year = cal.get(java.util.Calendar.YEAR)
+                Pair("$year-01-01", "$year-12-31")
+            }
+            RANGE_CUSTOM -> Pair(customStart ?: "0000-00-00", customEnd ?: "9999-12-31")
+            else -> Pair("0000-00-00", "9999-12-31")
+        }
+    }
 
+    /** 获取汇总卡片范围的 start/end */
+    private fun getSummaryRangeBounds(range: Int): Pair<String, String> {
+        val cal = java.util.Calendar.getInstance()
+        val today = dateStr("yyyy-MM-dd")
+        return when (range) {
+            SUMMARY_TODAY -> Pair(today, today)
+            SUMMARY_MONTH -> {
+                val firstDay = cal.apply { set(java.util.Calendar.DAY_OF_MONTH, 1) }
+                    .time.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it) }
+                val lastDay = cal.apply {
+                    set(java.util.Calendar.DAY_OF_MONTH,
+                        cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH))
+                }.time.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it) }
+                Pair(firstDay, lastDay)
+            }
+            SUMMARY_QUARTER -> getQuarterRangeBounds(cal)
+            SUMMARY_YEAR -> {
+                val year = cal.get(java.util.Calendar.YEAR)
+                Pair("$year-01-01", "$year-12-31")
+            }
+            else -> Pair(today, today)
+        }
+    }
+
+    /** 自然季度范围：Q1(1-3月), Q2(4-6月), Q3(7-9月), Q4(10-12月) */
+    private fun getQuarterRangeBounds(cal: java.util.Calendar): Pair<String, String> {
+        val year = cal.get(java.util.Calendar.YEAR)
+        val month0 = cal.get(java.util.Calendar.MONTH) // 0-based: 0=Jan
+        val quarter = month0 / 3 // 0, 1, 2, 3
+        val startMonth = quarter * 3 + 1 // 1, 4, 7, 10
+        val endMonth = startMonth + 2    // 3, 6, 9, 12
+        val endDay = cal.apply {
+            set(java.util.Calendar.YEAR, year)
+            set(java.util.Calendar.MONTH, endMonth - 1)
+            set(java.util.Calendar.DAY_OF_MONTH, 1)
+        }.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+        val start = "%04d-%02d-01".format(year, startMonth)
+        val end = "%04d-%02d-%02d".format(year, endMonth, endDay)
+        return Pair(start, end)
+    }
+
+    companion object {
+        // 交易方向筛选
+        private const val TRADE_ALL = 0
+        private const val TRADE_BUY = 1
+        private const val TRADE_SELL = 2
+
+        // 日期范围筛选（列表）
+        private const val RANGE_NONE = 0
+        private const val RANGE_TODAY = 1
+        private const val RANGE_MONTH = 2
+        private const val RANGE_QUARTER = 3
+        private const val RANGE_YEAR = 4
+        private const val RANGE_CUSTOM = 5
+
+        // 汇总卡片范围
+        private const val SUMMARY_TODAY = 0
+        private const val SUMMARY_MONTH = 1
+        private const val SUMMARY_QUARTER = 2
+        private const val SUMMARY_YEAR = 3
+
+        // 排序
         private const val SORT_TIME_DESC = 0
         private const val SORT_TYPE_PRICE_DESC = 1
         private const val SORT_TYPE_PRICE_ASC = 2
