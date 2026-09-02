@@ -40,21 +40,42 @@
             android:textColor="#333333"
             android:maxLines="1"
             android:gravity="center"
-            android:hint="直接输入（格式 yyyy-MM-dd HH:mm）" />
+            android:hint="输入日期（yyyy-MM-dd 或 yyyy-MM-dd HH:mm）" />
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- 用滚轮选按钮（点击后弹 DatePicker + TimePicker） -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnPickFromWheel"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+    <!-- 横向两个按钮：选日期 + 选时间 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="📅 用日历滚轮选择（推荐）"
-        android:textColor="#1565c0"
-        android:textSize="15sp"
-        app:strokeColor="#1565c0"
-        app:cornerRadius="8dp" />
+        android:orientation="horizontal"
+        android:layout_marginBottom="16dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPickFromWheel"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📅 选日期"
+            android:textColor="#1565c0"
+            android:textSize="15sp"
+            app:strokeColor="#1565c0"
+            app:cornerRadius="8dp"
+            android:layout_marginEnd="6dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPickTime"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="⏰ 选时间（可选）"
+            android:textColor="#757575"
+            android:textSize="15sp"
+            app:strokeColor="#bdbdbd"
+            app:cornerRadius="8dp"
+            android:layout_marginStart="6dp" />
+    </LinearLayout>
 
     <!-- Cancel / Confirm -->
     <LinearLayout

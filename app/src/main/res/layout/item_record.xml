@@ -20,12 +20,19 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Top row: tag + date time -->
+        <!-- Top row: checkbox + tag + date time -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
+
+            <CheckBox
+                android:id="@+id/cbSelect"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:contentDescription="选择此记录" />
 
             <TextView
                 android:id="@+id/tvTag"

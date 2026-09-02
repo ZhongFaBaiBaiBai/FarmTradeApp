@@ -59,6 +59,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         setupRecyclerView()
         setupFilterChips()
         setupFab()
+        setupBatchManage()
         loadRecords()
     }
 
@@ -91,6 +92,67 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
     private fun setupFab() {
         binding.fabAdd.setOnClickListener { showQuickAddDialog() }
+    }
+
+    // ==================== 批量管理 ====================
+
+    private fun setupBatchManage() {
+        binding.btnBatchManage.setOnClickListener {
+            if (adapter.isSelected()) {
+                adapter.exitMultiSelect()
+                showNormalMode()
+            } else {
+                adapter.enterMultiSelect()
+                showBatchMode()
+            }
+        }
+        binding.btnSelectAll.setOnClickListener {
+            adapter.selectAll()
+        }
+        binding.btnBatchDelete.setOnClickListener {
+            val ids = adapter.getSelectedIds()
+            if (ids.isEmpty()) {
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setMessage("请先勾选要删除的记录")
+                    .setPositiveButton("知道了", null)
+                    .show()
+                return@setOnClickListener
+            }
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("批量删除")
+                .setMessage("确定删除选中的 ${ids.size} 条记录吗？此操作不可撤销。")
+                .setPositiveButton("删除") { _, _ ->
+                    ids.forEach { databaseHelper.deleteRecord(it) }
+                    adapter.exitMultiSelect()
+                    showNormalMode()
+                    loadRecords()
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        }
+    }
+
+    private fun showBatchMode() {
+        binding.btnBatchManage.text = "完成"
+        binding.btnSelectAll.visibility = View.VISIBLE
+        binding.btnBatchDelete.visibility = View.VISIBLE
+        binding.tvSelectedCount.visibility = View.VISIBLE
+        binding.fabAdd.visibility = View.GONE
+    }
+
+    private fun showNormalMode() {
+        binding.btnBatchManage.text = "管理"
+        binding.btnSelectAll.visibility = View.GONE
+        binding.btnBatchDelete.visibility = View.GONE
+        binding.tvSelectedCount.visibility = View.GONE
+        binding.tvSelectedCount.text = ""
+        binding.fabAdd.visibility = View.VISIBLE
+    }
+
+    override fun onSelectionChanged(selectedCount: Int) {
+        binding.tvSelectedCount.text = "已选 $selectedCount 条"
+        binding.btnBatchDelete.isEnabled = selectedCount > 0
+        binding.btnBatchDelete.alpha = if (selectedCount > 0) 1.0f else 0.4f
     }
 
     // ==================== 数据加载与过滤 ====================

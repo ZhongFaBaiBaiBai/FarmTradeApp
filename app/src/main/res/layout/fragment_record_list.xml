@@ -33,6 +33,53 @@
                 android:textSize="22sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/tvSelectedCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#ffffff"
+                android:textSize="14sp"
+                android:layout_marginEnd="12dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/btnSelectAll"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="全选"
+                android:textColor="#ffffff"
+                android:textSize="15sp"
+                android:layout_marginEnd="12dp"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground" />
+
+            <TextView
+                android:id="@+id/btnBatchDelete"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="批量删除"
+                android:textColor="#ffcdd2"
+                android:textSize="15sp"
+                android:layout_marginEnd="12dp"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground" />
+
+            <TextView
+                android:id="@+id/btnBatchManage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="管理"
+                android:textColor="#ffffff"
+                android:textSize="15sp"
+                android:layout_marginEnd="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground" />
+
             <ImageView
                 android:id="@+id/ivSearch"
                 android:layout_width="32dp"

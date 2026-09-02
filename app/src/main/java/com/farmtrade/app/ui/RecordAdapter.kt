@@ -24,12 +24,18 @@ class RecordAdapter(
     private val listener: OnRecordClickListener
 ) : RecyclerView.Adapter<RecordAdapter.RecordViewHolder>() {
 
+    /** 多选模式 */
+    private var multiSelectMode = false
+    private val selectedIds = mutableSetOf<Long>()
+
     /**
      * 记录条目的点击与长按事件回调接口。
      */
     interface OnRecordClickListener {
         fun onItemClick(record: Record, position: Int)
         fun onItemLongClick(record: Record, position: Int)
+        /** 多选模式下选中数量变化时回调 */
+        fun onSelectionChanged(selectedCount: Int)
     }
 
     /**
@@ -51,18 +57,35 @@ class RecordAdapter(
         val record = records[position]
         bindRecord(holder.binding, record)
 
-        holder.itemView.setOnClickListener {
-            val pos = holder.bindingAdapterPosition
-            if (pos != RecyclerView.NO_POSITION) {
-                listener.onItemClick(records[pos], pos)
+        // 多选模式：显示 CheckBox，点击切换选中
+        if (multiSelectMode) {
+            holder.binding.cbSelect.visibility = View.VISIBLE
+            holder.binding.cbSelect.isChecked = selectedIds.contains(record.id)
+            holder.binding.cbSelect.setOnClickListener {
+                toggleSelection(record.id)
             }
-        }
-        holder.itemView.setOnLongClickListener {
-            val pos = holder.bindingAdapterPosition
-            if (pos != RecyclerView.NO_POSITION) {
-                listener.onItemLongClick(records[pos], pos)
+            holder.itemView.setOnClickListener {
+                toggleSelection(record.id)
             }
-            true
+            holder.itemView.setOnLongClickListener(null)
+            // 选中状态背景高亮
+            holder.itemView.alpha = if (selectedIds.contains(record.id)) 0.6f else 1.0f
+        } else {
+            holder.binding.cbSelect.visibility = View.GONE
+            holder.itemView.alpha = 1.0f
+            holder.itemView.setOnClickListener {
+                val pos = holder.bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    listener.onItemClick(records[pos], pos)
+                }
+            }
+            holder.itemView.setOnLongClickListener {
+                val pos = holder.bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    listener.onItemLongClick(records[pos], pos)
+                }
+                true
+            }
         }
     }
 
@@ -76,6 +99,39 @@ class RecordAdapter(
         records.addAll(newRecords)
         notifyDataSetChanged()
     }
+
+    // ==================== 多选模式 ====================
+
+    fun enterMultiSelect() {
+        multiSelectMode = true
+        selectedIds.clear()
+        notifyDataSetChanged()
+        listener.onSelectionChanged(0)
+    }
+
+    fun exitMultiSelect() {
+        multiSelectMode = false
+        selectedIds.clear()
+        notifyDataSetChanged()
+        listener.onSelectionChanged(0)
+    }
+
+    fun isSelected(): Boolean = multiSelectMode
+
+    fun toggleSelection(id: Long) {
+        if (selectedIds.contains(id)) selectedIds.remove(id) else selectedIds.add(id)
+        notifyDataSetChanged()
+        listener.onSelectionChanged(selectedIds.size)
+    }
+
+    fun selectAll() {
+        selectedIds.clear()
+        records.forEach { selectedIds.add(it.id) }
+        notifyDataSetChanged()
+        listener.onSelectionChanged(selectedIds.size)
+    }
+
+    fun getSelectedIds(): Set<Long> = selectedIds.toSet()
 
     // ==================== 绑定逻辑 ====================
 
