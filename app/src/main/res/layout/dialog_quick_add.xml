@@ -146,7 +146,46 @@
             app:tint="#e65100" />
     </LinearLayout>
 
-    <!-- Option 4: 手动填写 (green) -->
+    <!-- Option 4: 手动批量录入 (teal) -->
+    <LinearLayout
+        android:id="@+id/btnManualBatch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#e0f2f1"
+        android:padding="18dp"
+        android:layout_marginBottom="12dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground">
+
+        <TextView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:text="📝"
+            android:textSize="24sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="手动批量录入"
+            android:textColor="#00695c"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginStart="14dp" />
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@android:drawable/ic_media_play"
+            android:contentDescription="选择"
+            app:tint="#00695c" />
+    </LinearLayout>
+
+    <!-- Option 5: 手动填写 (green) -->
     <LinearLayout
         android:id="@+id/btnManualRecord"
         android:layout_width="match_parent"

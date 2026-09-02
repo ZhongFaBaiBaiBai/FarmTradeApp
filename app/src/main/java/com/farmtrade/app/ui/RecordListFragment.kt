@@ -155,6 +155,12 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
             dialog.dismiss()
             startQuickRecord(QuickRecordActivity.EXTRA_MODE_LEDGER)
         }
+        sheetBinding.btnManualBatch.setOnClickListener {
+            dialog.dismiss()
+            // 手动批量：直接跳转 LedgerReviewActivity，不传 JSON 即为手动模式
+            val intent = Intent(requireContext(), LedgerReviewActivity::class.java)
+            startActivityForResult(intent, REQ_QUICK_RECORD)
+        }
         sheetBinding.btnManualRecord.setOnClickListener {
             dialog.dismiss()
             startActivityForResult(

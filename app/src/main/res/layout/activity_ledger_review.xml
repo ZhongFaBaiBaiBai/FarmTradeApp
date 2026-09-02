@@ -223,14 +223,33 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 识别结果列表标题 -->
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- 识别结果列表标题 + 添加行按钮 -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="识别结果（每行一条，可改数字或删除错行）"
-                android:textColor="#666666"
-                android:textSize="13sp"
-                android:layout_marginBottom="6dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="记录列表（每行一条，可改数字或删除）"
+                    android:textColor="#666666"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddRow"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="+ 添加一行"
+                    android:textColor="#00695c"
+                    android:textSize="13sp"
+                    app:strokeColor="#00695c"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/llRows"

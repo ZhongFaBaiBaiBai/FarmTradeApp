@@ -20,11 +20,12 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 记录本批量录入确认页：
- * - 接收 [EXTRA_ROWS_JSON]（QuickRecordActivity 拍照 OCR 出的"总重-车重"算式列表）
+ * 批量录入确认页（拍照 OCR + 手动批量共用）：
+ * - 拍照模式：接收 [EXTRA_ROWS_JSON]（OCR 出的"总重-车重"算式列表）预填各行
+ * - 手动模式：不传 JSON，页面初始空，用户点"+ 添加一行"逐条录入
  * - 整批统一设置 方向 / 类型 / 单位 / 单价
- * - 每行可修改总重、车重（净重自动重算），可删除识别错误的行
- * - 一键批量保存，日期时间按行序每条递增 1 分钟，保证列表排序稳定
+ * - 每行可修改总重、车重（净重自动重算），可删除
+ * - 一键批量保存，日期时间按行序每条递增 1 分钟
  */
 class LedgerReviewActivity : AppCompatActivity() {
 
@@ -80,6 +81,10 @@ class LedgerReviewActivity : AppCompatActivity() {
         }
 
         rows.forEach { addRowView(it) }
+        // 手动模式：初始没数据时自动加一行空行，方便用户直接开始填
+        if (rows.isEmpty()) addRowView(OcrHelper.LedgerRow(0.0, 0.0))
+        // "+ 添加一行"按钮
+        binding.btnAddRow.setOnClickListener { addRowView(OcrHelper.LedgerRow(0.0, 0.0)) }
         updateSummary()
 
         binding.btnSaveAll.setOnClickListener { saveAll() }
@@ -100,8 +105,8 @@ class LedgerReviewActivity : AppCompatActivity() {
     /** 添加一行可编辑的算式（总重 − 车重 = 净重），净重随输入自动重算 */
     private fun addRowView(row: OcrHelper.LedgerRow) {
         val item = ItemLedgerRowBinding.inflate(LayoutInflater.from(this))
-        item.etRowGross.setText(Record.formatNumber(row.gross))
-        item.etRowTare.setText(Record.formatNumber(row.tare))
+        if (row.gross > 0) item.etRowGross.setText(Record.formatNumber(row.gross))
+        if (row.tare > 0) item.etRowTare.setText(Record.formatNumber(row.tare))
         val holder = RowHolder(item.root, item.etRowGross, item.etRowTare, item.tvRowNet)
 
         val watcher = object : TextWatcher {
@@ -129,9 +134,9 @@ class LedgerReviewActivity : AppCompatActivity() {
     private fun updateSummary() {
         val n = rowHolders.size
         binding.tvSummary.text = if (n > 0) {
-            "共识别 $n 条算式，请核对修改后保存（单价未识别，请统一填写）"
+            "共 $n 条记录，请核对后保存"
         } else {
-            "没有识别到算式，请返回重拍或手动录入"
+            "点击「+ 添加一行」开始录入"
         }
         binding.btnSaveAll.text = if (n > 0) "保存全部 $n 条记录" else "保存全部记录"
         binding.btnSaveAll.isEnabled = n > 0
