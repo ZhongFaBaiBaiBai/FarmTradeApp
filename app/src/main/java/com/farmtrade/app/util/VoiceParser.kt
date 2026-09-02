@@ -5,7 +5,7 @@ import com.farmtrade.app.data.Record
 /**
  * 语音解析工具 - 将自然语言解析为记录字段
  * 支持识别: 总重、车重、单价、买卖方向、类型、数量
- * 支持中文数字识别: 两千五 → 2500, 一块四 → 1.4
+ * 支持中文数字识别: 两千五 → 2500, 一块四 → 1.4, 一块二毛八 → 1.28, 三毛五 → 0.35
  * 示例: "总重五千斤，车重四百斤，一斤一块四" → 各字段值
  * 示例: "买入小麦，总重两千五百公斤，车重两千公斤，单价两块五"
  * 示例: "卖出玉米二十袋，每袋四十五块"
@@ -138,10 +138,13 @@ object VoiceParser {
 
         // 7. 识别单价
         // 匹配 "单价2.5" / "一斤1块4" / "每袋45" / "2块5一斤" / "45元一袋" / "一块四一斤"
+        // 中文数字转换后："一块二毛八一斤" → "1.28一斤"，"一斤一块二毛八" → "1斤1.28"
         val pricePatterns = listOf(
             Regex("""(?:单价|价格)[为是等于]?\s*(\d+\.?\d*)"""),
             Regex("""(\d+\.?\d*)\s*块\s*(\d+)\s*(?:一|每)?(?:斤|公斤|袋|桶|包|箱)?"""),
             Regex("""(?:一|每)(?:斤|公斤|袋|桶|包|箱|瓶|升)\s*(\d+\.?\d*)\s*[元块]?"""),
+            Regex("""(\d+\.?\d*)\s*一(?:斤|公斤|袋|桶|包|箱|瓶|升)"""),
+            Regex("""(?:斤|公斤|袋|桶|包|箱|瓶|升)\s*(\d+\.?\d*)"""),
             Regex("""(\d+\.?\d*)\s*[元块]/?\s*(?:斤|公斤|袋|桶|包|箱|瓶|升)"""),
             Regex("""(\d+\.?\d*)\s*[元块](?:一|每)?(?:斤|公斤|袋|桶|包|箱|瓶|升)?""")
         )
@@ -323,7 +326,7 @@ object VoiceParser {
                 }
                 break
             } else if (c == '块' && hasDigit) {
-                // "一块四" 这种价格表达，"块"作为特殊单位
+                // "一块四" / "一块二毛八" 这种价格表达，"块"作为特殊单位
                 // 检查后面是否有数字（角）
                 if (i + 1 < len && chineseDigitMap.containsKey(text[i + 1])) {
                     // "一块四" → 整个作为一个数字处理
@@ -332,6 +335,21 @@ object VoiceParser {
                     while (i < len && chineseDigitMap.containsKey(text[i])) {
                         i++
                     }
+                    // "一块二毛八"：角位数字后若紧跟"毛/角+数字"，继续吃分位（含"分"字）
+                    if (i < len && (text[i] == '毛' || text[i] == '角') &&
+                        i + 1 < len && chineseDigitMap.containsKey(text[i + 1])
+                    ) {
+                        i += 2
+                        if (i < len && text[i] == '分') i++
+                    }
+                }
+                break
+            } else if ((c == '毛' || c == '角') && hasDigit) {
+                // "三毛五" / "五毛" / "八角" 价格表达：把"毛/角"一并纳入数字串
+                i++
+                if (i < len && chineseDigitMap.containsKey(text[i])) {
+                    i++
+                    if (i < len && text[i] == '分') i++
                 }
                 break
             } else {
@@ -348,25 +366,28 @@ object VoiceParser {
 
     /**
      * 解析中文数字字符串为 Double。
-     * 支持整数、小数、价格表达（一块四 → 1.4）
+     * 支持整数、小数、价格表达（一块四 → 1.4、一块二毛八 → 1.28、三毛五 → 0.35、八角 → 0.8）
      */
     private fun parseChineseNumber(str: String): Double? {
         if (str.isEmpty()) return null
 
-        // 处理价格表达 "一块四"、"两块五"
+        // 处理价格表达 "一块四"、"两块五"、"一块二毛八"
         val kuaiIndex = str.indexOf('块')
         if (kuaiIndex > 0) {
             val yuanPart = parseIntegerChinese(str.substring(0, kuaiIndex))
-            val jiaoPartStr = if (kuaiIndex + 1 < str.length) str.substring(kuaiIndex + 1) else ""
-            val jiaoPart = if (jiaoPartStr.isNotEmpty()) {
-                parseIntegerChinese(jiaoPartStr)
-            } else {
-                null
-            }
             if (yuanPart != null) {
-                val yuan = yuanPart.toDouble()
-                val jiao = (jiaoPart ?: 0L).toDouble() / 10.0
-                return yuan + jiao
+                val rest = if (kuaiIndex + 1 < str.length) str.substring(kuaiIndex + 1) else ""
+                return yuanPart.toDouble() + parseJiaoFen(rest)
+            }
+        }
+
+        // 处理 "三毛五" → 0.35, "五毛" → 0.5, "八角" → 0.8
+        val maoIndex = str.indexOfFirst { it == '毛' || it == '角' }
+        if (maoIndex > 0) {
+            val jiaoPart = parseIntegerChinese(str.substring(0, maoIndex))
+            if (jiaoPart != null) {
+                val fenStr = str.substring(maoIndex + 1).removeSuffix("分")
+                return jiaoPart / 10.0 + (parseIntegerChinese(fenStr) ?: 0L) / 100.0
             }
         }
 
@@ -473,6 +494,23 @@ object VoiceParser {
         total += wanSection + qianSection
 
         return total.takeIf { it > 0 }
+    }
+
+    /**
+     * 解析"块"后面的角分部分。
+     * "二毛八" → 0.28, "二毛" → 0.2, "四" → 0.4（老式"一块四"）, "" → 0.0
+     */
+    private fun parseJiaoFen(rest: String): Double {
+        if (rest.isEmpty()) return 0.0
+        val maoIndex = rest.indexOfFirst { it == '毛' || it == '角' }
+        if (maoIndex >= 0) {
+            val jiao = (parseIntegerChinese(rest.substring(0, maoIndex)) ?: 0L) / 10.0
+            val fenStr = rest.substring(maoIndex + 1).removeSuffix("分")
+            return jiao + (parseIntegerChinese(fenStr) ?: 0L) / 100.0
+        }
+        // "一块四" 的 "四" 直接是角位；"一块零五" 的 "零五" 是分位（1.05）
+        val v = parseIntegerChinese(rest) ?: 0L
+        return if (rest.startsWith("零")) v / 100.0 else v / 10.0
     }
 
     /**
