@@ -80,7 +80,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     // ==================== 初始化 ====================
 
     private fun setupRecyclerView() {
-        adapter = RecordAdapter(mutableListOf(), this)
+        adapter = RecordAdapter(this)
         binding.rvRecordList.layoutManager = LinearLayoutManager(requireContext())
         binding.rvRecordList.adapter = adapter
     }
@@ -246,18 +246,15 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
             }
         }
         // 排序
-        filtered = when (sortMode) {
-            SORT_TYPE_THEN_PRICE_DESC -> filtered
-                .sortedWith(compareByDescending<Record> { it.type }
-                    .thenByDescending { it.unitPrice }
-                    .thenByDescending { it.dateTime })
-            SORT_TYPE_THEN_PRICE_ASC -> filtered
-                .sortedWith(compareByDescending<Record> { it.type }
-                    .thenBy { it.unitPrice }
-                    .thenByDescending { it.dateTime })
-            else -> filtered  // 默认：allRecords 已经是按时间倒序
+        when (sortMode) {
+            SORT_TYPE_THEN_PRICE_DESC -> adapter.updateGrouped(filtered, priceDesc = true)
+            SORT_TYPE_THEN_PRICE_ASC -> adapter.updateGrouped(filtered, priceDesc = false)
+            else -> {
+                // 默认时间倒序
+                val sorted = filtered.sortedByDescending { it.dateTime }
+                adapter.updateFlat(sorted)
+            }
         }
-        adapter.updateData(filtered)
     }
 
     private fun updateTodaySummary() {

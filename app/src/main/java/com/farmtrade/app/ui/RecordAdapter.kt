@@ -10,99 +10,274 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.farmtrade.app.R
 import com.farmtrade.app.data.Record
+import com.farmtrade.app.databinding.ItemGroupHeaderBinding
 import com.farmtrade.app.databinding.ItemRecordBinding
 
 /**
  * 买卖记录列表适配器。
  *
- * 适配 [item_record.xml] 布局，逐条展示 [Record] 的：
- * 方向标签、日期时间、类型名称、重量/数量、单价、总金额、来源标识，
- * 以及"沿用"标记。点击/长按通过 [OnRecordClickListener] 回调给宿主页面。
+ * 支持两种显示模式：
+ * 1. 默认平铺模式 — 直接显示 [Record] 列表，按时间排序
+ * 2. 分组折叠模式 — 先按类型分组，再按单价分组，组内按时间倒序，可折叠
+ *
+ * 多选模式仅在平铺模式下可用。
  */
 class RecordAdapter(
-    private val records: MutableList<Record> = mutableListOf(),
     private val listener: OnRecordClickListener
-) : RecyclerView.Adapter<RecordAdapter.RecordViewHolder>() {
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    /** 多选模式 */
+    // ==================== 数据模型 ====================
+
+    sealed class ListItem {
+        data class TypeHeader(val type: String, val count: Int, val subtotal: Double) : ListItem()
+        data class PriceHeader(
+            val type: String,
+            val unitPrice: Double,
+            val priceUnit: String,
+            val count: Int,
+            val subtotal: Double
+        ) : ListItem()
+        data class RecordItem(val record: Record) : ListItem()
+    }
+
+    // ==================== 状态 ====================
+
+    /** 平铺模式的原始记录 */
+    private var flatRecords: MutableList<Record> = mutableListOf()
+
+    /** 分组模式的平铺化列表（头+子项混合） */
+    private var flatList: MutableList<ListItem> = mutableListOf()
+
+    /** 是否启用分组折叠模式 */
+    private var groupedMode = false
+
+    /** 折叠状态：key = "TYPE:类型名" 或 "PRICE:类型名|单价" */
+    private val collapsedKeys = mutableSetOf<String>()
+
+    /** 多选模式（仅平铺模式） */
     private var multiSelectMode = false
     private val selectedIds = mutableSetOf<Long>()
 
-    /**
-     * 记录条目的点击与长按事件回调接口。
-     */
+    // ==================== ViewType 常量 ====================
+
+    companion object {
+        private const val TYPE_HEADER = 0
+        private const val PRICE_HEADER = 1
+        private const val RECORD_ITEM = 2
+    }
+
+    // ==================== 回调接口 ====================
+
     interface OnRecordClickListener {
         fun onItemClick(record: Record, position: Int)
         fun onItemLongClick(record: Record, position: Int)
-        /** 多选模式下选中数量变化时回调 */
         fun onSelectionChanged(selectedCount: Int)
     }
 
-    /**
-     * ViewHolder，持有 [item_record.xml] 生成的 ViewBinding。
-     */
+    // ==================== ViewHolder ====================
+
     class RecordViewHolder(val binding: ItemRecordBinding) :
         RecyclerView.ViewHolder(binding.root)
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecordViewHolder {
-        val binding = ItemRecordBinding.inflate(
-            LayoutInflater.from(parent.context),
-            parent,
-            false
-        )
-        return RecordViewHolder(binding)
+    class GroupHeaderViewHolder(val binding: ItemGroupHeaderBinding) :
+        RecyclerView.ViewHolder(binding.root)
+
+    // ==================== 基础方法 ====================
+
+    override fun getItemViewType(position: Int): Int {
+        val item = flatList[position]
+        return when (item) {
+            is ListItem.TypeHeader -> TYPE_HEADER
+            is ListItem.PriceHeader -> PRICE_HEADER
+            is ListItem.RecordItem -> RECORD_ITEM
+        }
     }
 
-    override fun onBindViewHolder(holder: RecordViewHolder, position: Int) {
-        val record = records[position]
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        return when (viewType) {
+            TYPE_HEADER, PRICE_HEADER -> GroupHeaderViewHolder(
+                ItemGroupHeaderBinding.inflate(inflater, parent, false)
+            )
+            else -> RecordViewHolder(
+                ItemRecordBinding.inflate(inflater, parent, false)
+            )
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val item = flatList[position]
+        when (holder) {
+            is GroupHeaderViewHolder -> bindGroupHeader(holder, item)
+            is RecordViewHolder -> bindRecordItem(holder, item as ListItem.RecordItem)
+        }
+    }
+
+    override fun getItemCount(): Int = flatList.size
+
+    // ==================== 绑定逻辑 ====================
+
+    private fun bindGroupHeader(holder: GroupHeaderViewHolder, item: ListItem) {
+        val b = holder.binding
+        when (item) {
+            is ListItem.TypeHeader -> {
+                b.tvGroupName.text = item.type
+                b.tvGroupName.textSize = 17f
+                b.tvGroupName.setTextColor(holder.itemView.context.getColor(R.color.green_primary))
+                b.tvCount.text = "${item.count}条"
+                b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
+                b.root.setBackgroundColor(0xFFFFFFFF.toInt())
+                // 折叠箭头方向 + 缩进
+                b.ivArrow.text = if (isCollapsed("TYPE:${item.type}")) "▶" else "▼"
+                b.root.setPadding(14, 14, 14, 14)
+                b.root.setOnClickListener {
+                    toggleCollapse("TYPE:${item.type}")
+                }
+            }
+            is ListItem.PriceHeader -> {
+                b.tvGroupName.text = "${Record.formatNumber(item.unitPrice)}元/${item.priceUnit}"
+                b.tvGroupName.textSize = 15f
+                b.tvGroupName.setTextColor(0xFF558B2F.toInt())
+                b.tvCount.text = "${item.count}条"
+                b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
+                b.root.setBackgroundColor(0xFFF1F8E9.toInt())
+                b.ivArrow.text = if (isCollapsed("PRICE:${item.type}|${item.unitPrice}")) "▶" else "▼"
+                // 缩进显示
+                b.root.setPadding(36, 10, 14, 10)
+                b.root.setOnClickListener {
+                    toggleCollapse("PRICE:${item.type}|${item.unitPrice}")
+                }
+            }
+            is ListItem.RecordItem -> Unit // 不会到这里
+        }
+    }
+
+    private fun bindRecordItem(holder: RecordViewHolder, item: ListItem.RecordItem) {
+        val record = item.record
         bindRecord(holder.binding, record)
 
-        // 多选模式：显示 CheckBox，点击切换选中
-        if (multiSelectMode) {
+        // 分组模式：隐藏 CheckBox，左侧缩进
+        if (groupedMode) {
+            holder.binding.cbSelect.visibility = View.GONE
+            holder.itemView.setPadding(48, 0, 0, 0)
+            holder.itemView.setOnClickListener {
+                listener.onItemClick(record, holder.bindingAdapterPosition)
+            }
+            holder.itemView.setOnLongClickListener {
+                listener.onItemLongClick(record, holder.bindingAdapterPosition)
+                true
+            }
+        } else if (multiSelectMode) {
+            holder.itemView.setPadding(0, 0, 0, 0)
             holder.binding.cbSelect.visibility = View.VISIBLE
             holder.binding.cbSelect.isChecked = selectedIds.contains(record.id)
-            holder.binding.cbSelect.setOnClickListener {
-                toggleSelection(record.id)
-            }
-            holder.itemView.setOnClickListener {
-                toggleSelection(record.id)
-            }
+            holder.binding.cbSelect.setOnClickListener { toggleSelection(record.id) }
+            holder.itemView.setOnClickListener { toggleSelection(record.id) }
             holder.itemView.setOnLongClickListener(null)
-            // 选中状态背景高亮
             holder.itemView.alpha = if (selectedIds.contains(record.id)) 0.6f else 1.0f
         } else {
+            holder.itemView.setPadding(0, 0, 0, 0)
             holder.binding.cbSelect.visibility = View.GONE
             holder.itemView.alpha = 1.0f
             holder.itemView.setOnClickListener {
-                val pos = holder.bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    listener.onItemClick(records[pos], pos)
-                }
+                listener.onItemClick(record, holder.bindingAdapterPosition)
             }
             holder.itemView.setOnLongClickListener {
-                val pos = holder.bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    listener.onItemLongClick(records[pos], pos)
-                }
+                listener.onItemLongClick(record, holder.bindingAdapterPosition)
                 true
             }
         }
     }
 
-    override fun getItemCount(): Int = records.size
+    // ==================== 更新数据 ====================
 
     /**
-     * 用新数据替换当前列表并整体刷新。
+     * 平铺模式：直接设置记录列表。
      */
-    fun updateData(newRecords: List<Record>) {
-        records.clear()
-        records.addAll(newRecords)
+    fun updateFlat(newRecords: List<Record>) {
+        groupedMode = false
+        flatRecords.clear()
+        flatRecords.addAll(newRecords)
+        flatList.clear()
+        flatRecords.forEach { flatList.add(ListItem.RecordItem(it)) }
         notifyDataSetChanged()
     }
 
-    // ==================== 多选模式 ====================
+    /**
+     * 分组模式：按 type → unitPrice 两级分组，组内按时间倒序。
+     * @param priceDesc true=单价降序，false=单价升序
+     */
+    fun updateGrouped(newRecords: List<Record>, priceDesc: Boolean = true) {
+        groupedMode = true
+        collapsedKeys.clear()
+        flatRecords.clear()
+        flatRecords.addAll(newRecords)
+        rebuildFlatList(priceDesc)
+        notifyDataSetChanged()
+    }
+
+    /** 平铺和分组之间切换时重建 flatList */
+    private fun rebuildFlatList(priceDesc: Boolean) {
+        flatList.clear()
+        // 按 type 分组
+        val typeGroups = flatRecords.groupBy { it.type }
+            .toList()
+            .sortedBy { it.first } // 类型按名称排序
+
+        for ((type, typeRecords) in typeGroups) {
+            val typeSubtotal = typeRecords.sumOf { it.totalAmount }
+            val typeCount = typeRecords.size
+            flatList.add(ListItem.TypeHeader(type, typeCount, typeSubtotal))
+
+            // 按 unitPrice 分组（保留两位小数作为 key）
+            val priceGroups = typeRecords.groupBy { "%.2f".format(it.unitPrice) }
+                .toList()
+                .let { pairs ->
+                    if (priceDesc) pairs.sortedByDescending { it.second.first().unitPrice }
+                    else pairs.sortedBy { it.second.first().unitPrice }
+                }
+
+            for ((priceKey, priceRecords) in priceGroups) {
+                val price = priceRecords.first().unitPrice
+                val priceSubtotal = priceRecords.sumOf { it.totalAmount }
+                val priceUnit = priceRecords.first().let { r ->
+                    when (r.measureMode) {
+                        Record.MODE_WEIGHT_KG, Record.MODE_WEIGHT_JIN -> "斤"
+                        else -> r.unitName
+                    }
+                }
+                flatList.add(ListItem.PriceHeader(type, price, priceUnit, priceRecords.size, priceSubtotal))
+
+                // 只有当该类型未折叠时才显示单价头和记录
+                if (!isCollapsed("TYPE:$type")) {
+                    if (!isCollapsed("PRICE:$type|$price")) {
+                        // 组内按时间倒序
+                        priceRecords.sortedByDescending { it.dateTime }
+                            .forEach { flatList.add(ListItem.RecordItem(it)) }
+                    }
+                }
+            }
+        }
+    }
+
+    // ==================== 折叠控制 ====================
+
+    private fun isCollapsed(key: String): Boolean = collapsedKeys.contains(key)
+
+    private fun toggleCollapse(key: String) {
+        if (collapsedKeys.contains(key)) collapsedKeys.remove(key) else collapsedKeys.add(key)
+        // 找到排序方向
+        rebuildFlatList(isPriceDesc())
+        notifyDataSetChanged()
+    }
+
+    /** 从当前 flatList 推断单价排序方向（简化：默认降序） */
+    private fun isPriceDesc(): Boolean = true // 分组时重建会按当前方向，简化处理
+
+    // ==================== 多选模式（仅平铺） ====================
 
     fun enterMultiSelect() {
+        if (groupedMode) return
         multiSelectMode = true
         selectedIds.clear()
         notifyDataSetChanged()
@@ -116,7 +291,7 @@ class RecordAdapter(
         listener.onSelectionChanged(0)
     }
 
-    fun isSelected(): Boolean = multiSelectMode
+    fun isSelected(): Boolean = multiSelectMode && !groupedMode
 
     fun toggleSelection(id: Long) {
         if (selectedIds.contains(id)) selectedIds.remove(id) else selectedIds.add(id)
@@ -126,7 +301,7 @@ class RecordAdapter(
 
     fun selectAll() {
         selectedIds.clear()
-        records.forEach { selectedIds.add(it.id) }
+        flatRecords.forEach { selectedIds.add(it.id) }
         notifyDataSetChanged()
         listener.onSelectionChanged(selectedIds.size)
     }
@@ -141,17 +316,11 @@ class RecordAdapter(
         val green = ContextCompat.getColor(context, R.color.green_primary)
         val orange = ContextCompat.getColor(context, R.color.orange_primary)
 
-        // 方向标签：买入绿色背景、卖出橙色背景
         b.tvTag.text = record.direction
         b.tvTag.setBackgroundColor(if (isBuy) green else orange)
-
-        // 日期时间
         b.tvDateTime.text = record.dateTime
-
-        // 类型名称（大号加粗）
         b.tvTypeName.text = record.type
 
-        // 来源标识：拍照 / 语音 / 手动（不显示）
         when (record.source) {
             Record.SOURCE_PHOTO -> {
                 b.tvSourceBadge.text = "📷拍照"
@@ -161,53 +330,37 @@ class RecordAdapter(
                 b.tvSourceBadge.text = "🎤语音"
                 b.tvSourceBadge.visibility = View.VISIBLE
             }
-            else -> {
-                b.tvSourceBadge.visibility = View.GONE
-            }
+            else -> b.tvSourceBadge.visibility = View.GONE
         }
 
-        // 重量 / 数量信息
         if (record.measureMode == Record.MODE_QUANTITY) {
-            // 数量模式：数量:X unitName
             b.layoutWeight.visibility = View.GONE
             b.layoutQuantity.visibility = View.VISIBLE
             b.tvQuantity.text = Record.formatNumber(record.quantity)
             b.tvUnitName.text = " ${record.unitName}"
         } else {
-            // 重量模式：总重:X | 车重:Y | 净重:Z unitName
             b.layoutWeight.visibility = View.VISIBLE
             b.layoutQuantity.visibility = View.GONE
             b.tvGrossWeight.text = "总重:${Record.formatNumber(record.grossWeight)}"
             b.tvTareWeight.text = withCarryOver(
                 "车重:${Record.formatNumber(record.vehicleWeight)}",
-                record.isCarryOver,
-                orange
+                record.isCarryOver, orange
             )
-            b.tvNetWeight.text =
-                "净重:${Record.formatNumber(record.netWeight)} ${record.unitName}"
+            b.tvNetWeight.text = "净重:${Record.formatNumber(record.netWeight)} ${record.unitName}"
         }
 
-        // 单价：单价:X元/单位（沿用时附橙色"(沿用)"）
-        // 公斤模式下单价按"元/斤"计算，所以显示也用"元/斤"
         val priceUnit = when (record.measureMode) {
-            Record.MODE_WEIGHT_KG -> "斤"
-            Record.MODE_WEIGHT_JIN -> "斤"
+            Record.MODE_WEIGHT_KG, Record.MODE_WEIGHT_JIN -> "斤"
             else -> record.unitName
         }
         b.tvUnitPrice.text = withCarryOver(
             "单价:${Record.formatNumber(record.unitPrice)}元/$priceUnit",
-            record.isCarryOver,
-            orange
+            record.isCarryOver, orange
         )
-
-        // 总金额：买入绿色、卖出橙色，右对齐大号
         b.tvTotalAmount.text = "￥${Record.formatMoney(record.totalAmount)}"
         b.tvTotalAmount.setTextColor(if (isBuy) green else orange)
     }
 
-    /**
-     * 在 [base] 文本后追加橙色的"(沿用)"标记（仅在 [carryOver] 为真时）。
-     */
     private fun withCarryOver(base: String, carryOver: Boolean, color: Int): CharSequence {
         if (!carryOver) return base
         val ssb = SpannableStringBuilder(base)

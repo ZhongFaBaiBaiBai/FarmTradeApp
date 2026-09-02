@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?android:attr/selectableItemBackground"
+    android:background="#ffffff">
+
+    <!-- 折叠箭头 -->
+    <TextView
+        android:id="@+id/ivArrow"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:text="▼"
+        android:textSize="10sp"
+        android:textColor="#666666"
+        android:gravity="center" />
+
+    <!-- 组名（类型名或单价） -->
+    <TextView
+        android:id="@+id/tvGroupName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="#2e7d32"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <!-- 条数 -->
+    <TextView
+        android:id="@+id/tvCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="#666666"
+        android:textSize="13sp"
+        android:layout_marginEnd="12dp" />
+
+    <!-- 金额小计 -->
+    <TextView
+        android:id="@+id/tvSubtotal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="#2e7d32"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+</LinearLayout>
