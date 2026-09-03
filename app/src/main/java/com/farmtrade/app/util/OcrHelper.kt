@@ -30,8 +30,14 @@ object OcrHelper {
 
     data class LedgerRow(val gross: Double, val tare: Double)
 
-    private val subtractionRegex = Regex("""(\d{1,7}(?:\.\d{1,3})?)\s*[-–—－]\s*(\d{1,7}(?:\.\d{1,3})?)""")
+    private val subtractionRegex = Regex("""(?<!\d)(\d{3,7}(?:\.\d{1,3})?)\s*[-–—－]\s*(\d{3,7}(?:\.\d{1,3})?)(?!\d)""")
     private val numberRegex = Regex("""(\d{1,7})(?:\.(\d{1,3}))?""")
+    /**
+     * 独立重量数字：3~7 位（地磅重量合理范围），且前后不能紧贴数字。
+     * 防止电话(11位)/单号(13位)等长数字串被 \d{1,7} 切成两段误判为算式，
+     * 也顺便拦掉 2 位碎片（如手写截断的 "50"、"8"）。
+     */
+    private val standaloneWeightRegex = Regex("""(?<!\d)(\d{3,7})(?:\.(\d{1,3}))?(?!\d)""")
     private val weightKeywords = Regex("""总重|毛重|车重|皮重|车皮重|净重|毛|皮|kg|公斤|斤|吨|tare|gross""", RegexOption.IGNORE_CASE)
 
     // ================== 公开入口 ==================
@@ -378,11 +384,11 @@ object OcrHelper {
                 val norm = line.text.replace(" ", "").replace(",", "").replace("，", "")
                 if (norm.matches(Regex("""\d{1,2}[:：]\d{2}([:：]\d{2})?"""))) continue
                 val hasKeyword = weightKeywords.containsMatchIn(norm)
-                for (m in numberRegex.findAll(norm)) {
+                // 用独立数字正则：电话/单号等 8 位以上长串不会被切碎误选
+                for (m in standaloneWeightRegex.findAll(norm)) {
                     val display = m.value
                     val value = display.toDoubleOrNull() ?: continue
                     if (value <= 0.0) continue
-                    if (value > 9_999_999) continue
                     nums.add(Num(display, value, hasKeyword))
                 }
             }
@@ -415,9 +421,11 @@ object OcrHelper {
                     if (isValidLedgerRow(gross, tare)) rows.add(LedgerRow(gross, tare))
                 } else {
                     // 放宽：手写减号可能被 OCR 吞掉/变形。
-                    // 用保留空格的原始文本提取，一行恰好两个数字且前大后小也算算式
+                    // 用保留空格的原始文本提取，一行恰好两个独立重量数字且前大后小也算算式。
+                    // standaloneWeightRegex 带数字边界：电话(11位)/单号(13位)长串不会被切碎误判，
+                    // 2 位截断碎片（如 "50"、"8"）也不参与。
                     val nums = dateTimeStripRegex.replace(rawNorm, "")
-                        .let { numberRegex.findAll(it) }
+                        .let { standaloneWeightRegex.findAll(it) }
                         .mapNotNull { mm -> mm.value.toDoubleOrNull() }
                         .toList()
                     if (nums.size == 2 && isValidLedgerRow(nums[0], nums[1])) {
