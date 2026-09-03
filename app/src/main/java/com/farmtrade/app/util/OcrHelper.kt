@@ -52,7 +52,17 @@ object OcrHelper {
         val n3 = recognizeSevenSegmentDigits(preprocessed)
         if (n3 != null) return n3
 
-        // —— 策略 4：原图 + 3x 放大兜底
+        // —— 策略 4：纸张裁剪 + 3x 放大 + ±12° 旋转（手写记录本小字场景）
+        val paperScaled = cropAndScalePaper(bitmap)
+        val n5 = runMlKit(paperScaled).let { pickLargestNumber(it) }
+        if (n5 != null) return n5
+        for (angle in listOf(-12f, 12f)) {
+            val rotated = rotateBitmap(paperScaled, angle)
+            val n6 = runMlKit(rotated).let { pickLargestNumber(it) }
+            if (n6 != null) return n6
+        }
+
+        // —— 策略 5：原图 + 2x 放大兜底
         val scaled = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
         val n4 = runMlKit(scaled).let { pickLargestNumber(it) }
         scaled.recycle()
@@ -60,12 +70,25 @@ object OcrHelper {
     }
 
     suspend fun recognizeLedgerRows(bitmap: Bitmap): List<LedgerRow> {
-        val direct = runMlKit(bitmap).let { extractLedgerRows(it) }
-        if (direct.isNotEmpty()) return direct
-        val scaled = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
-        val rows = runMlKit(scaled).let { extractLedgerRows(it) }
-        scaled.recycle()
-        return rows
+        // Pass 1: 原图直接识别
+        runMlKit(bitmap).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+
+        // Pass 2: 纸张裁剪 + 3x 放大（手写小字/背景干扰大时）
+        val scaled = cropAndScalePaper(bitmap)
+        runMlKit(scaled).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+
+        // Pass 3: 裁剪 + 放大后 ±12° 旋转重试（手写行倾斜）
+        for (angle in listOf(-12f, 12f)) {
+            val rotated = rotateBitmap(scaled, angle)
+            val rows = runMlKit(rotated).let { extractLedgerRows(it) }
+            if (rows.isNotEmpty()) return rows
+        }
+
+        // Pass 4: 原图 2x 放大兜底
+        val scaled2 = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
+        val rows4 = runMlKit(scaled2).let { extractLedgerRows(it) }
+        scaled2.recycle()
+        return rows4
     }
 
     // ================== 过磅单多字段识别 ==================
@@ -258,23 +281,117 @@ object OcrHelper {
         return pool.maxByOrNull { it.value }?.display
     }
 
+    /** 日期/时间片段（先剔除，避免 "2026-09-03" 被误当成算式 "2026-09"） */
+    private val dateTimeStripRegex = Regex("""\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?|\d{1,2}:\d{2}(?::\d{2})?""")
+
     private fun extractLedgerRows(visionText: Text?): List<LedgerRow> {
         if (visionText == null) return emptyList()
         val rows = mutableListOf<LedgerRow>()
         for (block in visionText.textBlocks) {
             for (line in block.lines) {
-                val norm = line.text
-                    .replace(" ", "").replace(",", "").replace("，", "")
+                // 原始文本：保留空格（减号丢失时两个数字靠空格分隔），仅统一标点
+                val rawNorm = line.text
+                    .replace(",", "").replace("，", "")
                     .replace('–', '-').replace('—', '-').replace('－', '-')
-                val m = subtractionRegex.find(norm) ?: continue
-                val gross = m.groupValues[1].toDoubleOrNull() ?: continue
-                val tare = m.groupValues[2].toDoubleOrNull() ?: continue
-                if (gross <= tare) continue
-                if (gross < 10 || gross > 999999 || tare < 1) continue
-                rows.add(LedgerRow(gross, tare))
+                // 主分支文本：去空格 + 剔除日期/时间片段
+                val cleaned = dateTimeStripRegex.replace(rawNorm.replace(" ", ""), "")
+
+                val m = subtractionRegex.find(cleaned)
+                if (m != null) {
+                    val gross = m.groupValues[1].toDoubleOrNull() ?: continue
+                    val tare = m.groupValues[2].toDoubleOrNull() ?: continue
+                    if (isValidLedgerRow(gross, tare)) rows.add(LedgerRow(gross, tare))
+                } else {
+                    // 放宽：手写减号可能被 OCR 吞掉/变形。
+                    // 用保留空格的原始文本提取，一行恰好两个数字且前大后小也算算式
+                    val nums = dateTimeStripRegex.replace(rawNorm, "")
+                        .let { numberRegex.findAll(it) }
+                        .mapNotNull { mm -> mm.value.toDoubleOrNull() }
+                        .toList()
+                    if (nums.size == 2 && isValidLedgerRow(nums[0], nums[1])) {
+                        rows.add(LedgerRow(nums[0], nums[1]))
+                    }
+                }
             }
         }
         return rows
+    }
+
+    /** 算式合理性：毛重>皮重，毛重 10~999999，皮重 >= 1 */
+    private fun isValidLedgerRow(gross: Double, tare: Double): Boolean {
+        if (gross <= tare) return false
+        if (gross < 10 || gross > 999999) return false
+        if (tare < 1) return false
+        return true
+    }
+
+    // ================== 内部：纸张区域检测 / 旋转 ==================
+
+    /**
+     * 检测纸张（白/浅色低饱和度像素）包围盒并裁剪，用于手写记录本等
+     * "本子只占画面一小部分"的场景，裁掉大部分背景干扰。
+     * 纸张占比过小或包围盒异常时返回原图。
+     */
+    private fun cropPaperRegion(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        var minX = w; var maxX = 0; var minY = h; var maxY = 0
+        var count = 0
+        for (y in 0 until h step 2) {
+            for (x in 0 until w step 2) {
+                val p = pixels[y * w + x]
+                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                val maxc = maxOf(r, g, b); val minc = minOf(r, g, b)
+                // 浅色纸张（白/浅蓝/浅黄）：亮度高、饱和度低
+                val isPaper = minc > 140 && (maxc - minc) < 70
+                if (isPaper) {
+                    count++
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        // 纸张像素占比 < 8% → 判定失败返回原图
+        val sampled = (w / 2) * (h / 2)
+        if (count < sampled * 0.08) return src
+        val bw = maxX - minX; val bh = maxY - minY
+        if (bw < w * 0.15 || bh < h * 0.15) return src
+
+        // 留 5% 余量
+        val pad = (maxOf(bw, bh) * 0.05).toInt()
+        val x0 = (minX - pad).coerceAtLeast(0)
+        val y0 = (minY - pad).coerceAtLeast(0)
+        val x1 = (maxX + pad).coerceAtMost(w - 1)
+        val y1 = (maxY + pad).coerceAtMost(h - 1)
+        return Bitmap.createBitmap(src, x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+    }
+
+    private fun rotateBitmap(src: Bitmap, degrees: Float): Bitmap {
+        val m = android.graphics.Matrix()
+        m.postRotate(degrees)
+        return Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
+    }
+
+    /**
+     * 纸张裁剪 + 限制最大边 1200px + 3x 放大。
+     * 限制原始尺寸防止 3x 后超过 ML Kit 图像大小限制 / 内存溢出。
+     */
+    private fun cropAndScalePaper(src: Bitmap, factor: Int = 3): Bitmap {
+        val paper = cropPaperRegion(src)
+        val cap = 1200
+        val p = if (maxOf(paper.width, paper.height) > cap) {
+            val ratio = cap.toFloat() / maxOf(paper.width, paper.height)
+            Bitmap.createScaledBitmap(paper, (paper.width * ratio).toInt(), (paper.height * ratio).toInt(), true)
+        } else {
+            paper
+        }
+        return Bitmap.createScaledBitmap(p, p.width * factor, p.height * factor, true)
     }
 
     // ================== 内部：LED 显示屏预处理 ==================
