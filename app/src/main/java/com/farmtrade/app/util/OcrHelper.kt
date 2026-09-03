@@ -2,10 +2,8 @@ package com.farmtrade.app.util
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ImageDecoder
-import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
@@ -91,20 +89,17 @@ object OcrHelper {
 
     // ================== 内部：ML Kit ==================
 
-    private suspend fun runMlKit(bitmap: Bitmap): Text =
+    private suspend fun runMlKit(bitmap: Bitmap): Text? =
         suspendCancellableCoroutine { cont ->
             val image = InputImage.fromBitmap(bitmap, 0)
             TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
                 .process(image)
                 .addOnSuccessListener { if (cont.isActive) cont.resume(it) }
-                .addOnFailureListener {
-                    if (cont.isActive) cont.resume(
-                        Text(emptyList(), "")
-                    )
-                }
+                .addOnFailureListener { if (cont.isActive) cont.resume(null) }
         }
 
-    private fun pickLargestNumber(visionText: Text): String? {
+    private fun pickLargestNumber(visionText: Text?): String? {
+        if (visionText == null) return null
         data class Num(val display: String, val value: Double, val hasKeyword: Boolean)
         val nums = mutableListOf<Num>()
         for (block in visionText.textBlocks) {
@@ -127,7 +122,8 @@ object OcrHelper {
         return pool.maxByOrNull { it.value }?.display
     }
 
-    private fun extractLedgerRows(visionText: Text): List<LedgerRow> {
+    private fun extractLedgerRows(visionText: Text?): List<LedgerRow> {
+        if (visionText == null) return emptyList()
         val rows = mutableListOf<LedgerRow>()
         for (block in visionText.textBlocks) {
             for (line in block.lines) {
