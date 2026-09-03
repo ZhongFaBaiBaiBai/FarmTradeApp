@@ -208,11 +208,10 @@ object OcrHelper {
         var type: String? = null
         var dateTime: String? = null
 
-        for (block in visionText.textBlocks) {
-            for (line in block.lines) {
-                // 规整：去空格/逗号，统一负号
-                val norm = line.text.replace(" ", "").replace(",", "").replace("，", "")
-                if (norm.isBlank()) continue
+        // 关键：过磅单是"标签列 | 数值列 | 单位列"三列布局，ML Kit 常把三列拆成不同
+        // 文本块（如"皮重："一行、"814"另一行），必须先按 Y 坐标合并成视觉行再匹配
+        for (norm in buildLogicalLines(visionText)) {
+            if (norm.isBlank()) continue
 
                 // 1) 过磅时间
                 if (dateTime == null) {
@@ -245,10 +244,9 @@ object OcrHelper {
                     numAfter(norm, "净重")?.let { net = toKg(norm, it) }
                 }
 
-                // 4) 单价（元/斤，不换算）
-                if (price == null && norm.contains("单价")) {
-                    price = numAfter(norm, "单价")
-                }
+            // 4) 单价（元/斤，不换算）
+            if (price == null && norm.contains("单价")) {
+                price = numAfter(norm, "单价")
             }
         }
 
@@ -294,6 +292,51 @@ object OcrHelper {
             if (cleaned.isNotBlank() && cleaned.length <= 8) return cleaned
         }
         return null
+    }
+
+    /** ML Kit 文本行（带位置，用于按 Y 坐标合并同一视觉行） */
+    private data class LogicLine(val text: String, val centerY: Int, val centerX: Int, val height: Int)
+
+    /**
+     * 把 OCR 结果按"视觉行"合并：
+     * 过磅单是"标签列 | 数值列 | 单位列"三列布局，ML Kit 经常把三列拆成不同 block
+     * （如"皮重："一行、"814"一行、"公斤"一行），导致关键词和数字匹配失败。
+     * 这里按行 boundingBox 的 Y 坐标聚类：Y 接近的多个片段视为同一视觉行，
+     * 行内再按 X 坐标从左到右拼接。
+     */
+    private fun buildLogicalLines(visionText: Text): List<String> {
+        val raw = mutableListOf<LogicLine>()
+        for (block in visionText.textBlocks) {
+            for (line in block.lines) {
+                val t = line.text
+                    ?.replace(" ", "")?.replace(",", "")?.replace("，", "")
+                    ?.replace('–', '-')?.replace('—', '-')?.replace('－', '-')
+                    .orEmpty()
+                if (t.isBlank()) continue
+                val box = line.boundingBox
+                raw.add(
+                    LogicLine(
+                        t,
+                        box?.let { it.top + it.height() / 2 } ?: 0,
+                        box?.let { it.left + it.width() / 2 } ?: 0,
+                        (box?.height() ?: 30).coerceAtLeast(10)
+                    )
+                )
+            }
+        }
+        if (raw.isEmpty()) return emptyList()
+        raw.sortBy { it.centerY }
+
+        // Y 坐标聚类：与当前行任一片段中心 Y 差距 < 行高 60% 视为同一视觉行
+        val rows = mutableListOf<MutableList<LogicLine>>()
+        for (tl in raw) {
+            val last = rows.lastOrNull()
+            val sameRow = last != null && last.any {
+                kotlin.math.abs(it.centerY - tl.centerY) < maxOf(it.height, tl.height) * 0.6
+            }
+            if (sameRow) last!!.add(tl) else rows.add(mutableListOf(tl))
+        }
+        return rows.map { row -> row.sortedBy { it.centerX }.joinToString("") { it.text } }
     }
 
     fun createImageUri(context: Context): Uri? {

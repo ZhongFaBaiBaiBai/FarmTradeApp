@@ -589,14 +589,34 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 if (value != null && value > 0) {
                     handleOcrResult(value)
                 } else {
-                    showToast("未识别到有效数字")
-                    if (cameraForInitial && !this@QuickRecordActivity::_pendingRecord.isInitialized) finish()
+                    showOcrFailureDialog()
                 }
             } else {
-                showToast("OCR 识别失败")
-                if (cameraForInitial && !this@QuickRecordActivity::_pendingRecord.isInitialized) finish()
+                showOcrFailureDialog()
             }
         }
+    }
+
+    /**
+     * 识别失败：不再直接退出，让用户选择 重拍 / 手动录入 / 返回。
+     * 针对老人远距离拍地磅屏、手抖、光线差等场景，重拍比退出体验好得多。
+     */
+    private fun showOcrFailureDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("未能识别")
+            .setMessage("照片没有识别到内容。\n\n拍摄建议：\n• 地磅屏：靠近拍，让屏幕占画面一半以上\n• 过磅单：正对票据，字清晰不反光\n• 手要稳，先点屏幕对焦")
+            .setPositiveButton("重新拍照") { _, _ ->
+                cameraForInitial = true
+                if (hasCameraPermission()) launchCamera()
+                else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+            .setNegativeButton("手动录入") { _, _ ->
+                startActivity(Intent(this, AddRecordActivity::class.java))
+                finish()
+            }
+            .setNeutralButton("返回") { _, _ -> finish() }
+            .setCancelable(false)
+            .show()
     }
 
     /** 初始拍照识别到过磅单：沿用逻辑生成基础记录后，用票据字段覆盖 */
@@ -636,8 +656,21 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private suspend fun handleLedgerOcr(bitmap: android.graphics.Bitmap?) {
         val rows = if (bitmap != null) OcrHelper.recognizeLedgerRows(bitmap) else emptyList()
         if (rows.isEmpty()) {
-            showToast("没有识别到「总重-车重」算式，请重拍或改用手动录入")
-            finish()
+            MaterialAlertDialogBuilder(this)
+                .setTitle("未能识别算式")
+                .setMessage("没有识别到「总重-车重」算式。\n\n建议：本子占画面一半以上、正对拍摄、对焦清晰，字写大一些。\n也可以改为手动逐条录入。")
+                .setPositiveButton("重新拍照") { _, _ ->
+                    cameraForInitial = true
+                    if (hasCameraPermission()) launchCamera()
+                    else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+                .setNegativeButton("手动录入") { _, _ ->
+                    // 不传 JSON 打开批量确认页 = 手动逐条添加模式
+                    editRecordLauncher.launch(Intent(this, LedgerReviewActivity::class.java))
+                }
+                .setNeutralButton("返回") { _, _ -> finish() }
+                .setCancelable(false)
+                .show()
             return
         }
         val arr = org.json.JSONArray()
