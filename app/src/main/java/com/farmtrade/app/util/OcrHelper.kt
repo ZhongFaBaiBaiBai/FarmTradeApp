@@ -2,7 +2,11 @@ package com.farmtrade.app.util
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ImageDecoder
+import android.graphics.Paint
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -17,55 +21,55 @@ import kotlin.coroutines.resume
 
 /**
  * OCR 文字识别工具。
- * - 单字段：[recognizeFromBitmap] 返回最可能是重量的数字（取最大值）。
- * - 记录本批量：[recognizeLedgerRows] 逐行扫描"总重-车重"算式，一条算式一条记录。
+ *  - 单字段：[recognizeFromBitmap] 返回最可能是重量的数字。
+ *  - 记录本批量：[recognizeLedgerRows] 逐行扫描"总重-车重"算式。
+ *
+ *  针对【地磅LED七段数码管】做了专门优化：
+ *  1) 前置图像预处理：只保留绿色高亮度发光像素 → 自动裁剪屏幕区域 → 放大3x → 反色为白底黑字 → 二值化。
+ *  2) 双引擎：ML Kit 先识别；若失败，则走【七段数码管像素模板匹配】fallback。
  */
 object OcrHelper {
 
-    /** 记录本批量识别：一行算式 = 一条记录（gross=总重，tare=车重）。 */
     data class LedgerRow(val gross: Double, val tare: Double)
 
-    /** 减法算式 "2500-800"，允许减号是 - – — 或全角 － */
     private val subtractionRegex = Regex("""(\d{1,7}(?:\.\d{1,3})?)\s*[-–—－]\s*(\d{1,7}(?:\.\d{1,3})?)""")
-    /** 普通数字 */
     private val numberRegex = Regex("""(\d{1,7})(?:\.(\d{1,3}))?""")
-    /** 重量相关关键词：数字所在行含这些词时优先采纳 */
     private val weightKeywords = Regex("""总重|毛重|车重|皮重|车皮重|净重|毛|皮|kg|公斤|斤|吨|tare|gross""", RegexOption.IGNORE_CASE)
 
     // ================== 公开入口 ==================
 
-    /** 单字段：从 Bitmap 识别一个最像重量的数字（关键词优先，其次取最大值）。 */
-    suspend fun recognizeFromBitmap(bitmap: Bitmap): String? =
-        suspendCancellableCoroutine { cont ->
-            val image = InputImage.fromBitmap(bitmap, 0)
-            TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
-                .process(image)
-                .addOnSuccessListener { visionText ->
-                    if (cont.isActive) cont.resume(pickLargestNumber(visionText))
-                }
-                .addOnFailureListener {
-                    if (cont.isActive) cont.resume(null)
-                }
-        }
+    suspend fun recognizeFromBitmap(bitmap: Bitmap): String? {
+        // —— 策略 1：先直接交给 ML Kit（正常文本/记录本场景快速成功）
+        val r1 = runMlKit(bitmap)
+        val n1 = pickLargestNumber(r1)
+        if (n1 != null) return n1
 
-    /**
-     * 记录本批量：逐行扫描"总重-车重"算式（如 1880-810），一条算式 = 一条记录。
-     * 复杂行（带 ×2、×1.1 等乘法）只取减号前后两个数；识别不准的行由用户在确认列表里删除。
-     */
-    suspend fun recognizeLedgerRows(bitmap: Bitmap): List<LedgerRow> =
-        suspendCancellableCoroutine { cont ->
-            val image = InputImage.fromBitmap(bitmap, 0)
-            TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
-                .process(image)
-                .addOnSuccessListener { visionText ->
-                    if (cont.isActive) cont.resume(extractLedgerRows(visionText))
-                }
-                .addOnFailureListener {
-                    if (cont.isActive) cont.resume(emptyList())
-                }
-        }
+        // —— 策略 2：LED 预处理管线 → ML Kit
+        val preprocessed = preprocessLedScreen(bitmap)
+        val r2 = runMlKit(preprocessed)
+        val n2 = pickLargestNumber(r2)
+        if (n2 != null) return n2
 
-    /** 为拍照创建临时图片 Uri（经 FileProvider 共享）。 */
+        // —— 策略 3：七段数码管像素识别 fallback
+        val n3 = recognizeSevenSegmentDigits(preprocessed)
+        if (n3 != null) return n3
+
+        // —— 策略 4：原图 + 3x 放大兜底
+        val scaled = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
+        val n4 = runMlKit(scaled).let { pickLargestNumber(it) }
+        scaled.recycle()
+        return n4
+    }
+
+    suspend fun recognizeLedgerRows(bitmap: Bitmap): List<LedgerRow> {
+        val direct = runMlKit(bitmap).let { extractLedgerRows(it) }
+        if (direct.isNotEmpty()) return direct
+        val scaled = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
+        val rows = runMlKit(scaled).let { extractLedgerRows(it) }
+        scaled.recycle()
+        return rows
+    }
+
     fun createImageUri(context: Context): Uri? {
         return try {
             val file = File.createTempFile("weigh_${System.currentTimeMillis()}", ".jpg", context.cacheDir)
@@ -74,7 +78,6 @@ object OcrHelper {
         } catch (_: Exception) { null }
     }
 
-    /** 从 Uri 加载 Bitmap（兼容 Android 9 以下）。 */
     fun loadBitmap(context: Context, uri: Uri): Bitmap? {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -86,31 +89,39 @@ object OcrHelper {
         } catch (_: Exception) { null }
     }
 
-    // ================== 内部实现 ==================
+    // ================== 内部：ML Kit ==================
 
-    /**
-     * 从 OCR 文本中取最可能是重量的数字。
-     * 策略：有关键词标注（总重/毛重/kg/斤等）的数字优先；没有关键词才 fallback 取最大值。
-     */
+    private suspend fun runMlKit(bitmap: Bitmap): Text =
+        suspendCancellableCoroutine { cont ->
+            val image = InputImage.fromBitmap(bitmap, 0)
+            TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+                .process(image)
+                .addOnSuccessListener { if (cont.isActive) cont.resume(it) }
+                .addOnFailureListener {
+                    if (cont.isActive) cont.resume(
+                        Text(emptyList(), "")
+                    )
+                }
+        }
+
     private fun pickLargestNumber(visionText: Text): String? {
         data class Num(val display: String, val value: Double, val hasKeyword: Boolean)
         val nums = mutableListOf<Num>()
         for (block in visionText.textBlocks) {
             for (line in block.lines) {
                 val norm = line.text.replace(" ", "").replace(",", "").replace("，", "")
-                // 跳过时间格式
                 if (norm.matches(Regex("""\d{1,2}[:：]\d{2}([:：]\d{2})?"""))) continue
                 val hasKeyword = weightKeywords.containsMatchIn(norm)
                 for (m in numberRegex.findAll(norm)) {
                     val display = m.value
                     val value = display.toDoubleOrNull() ?: continue
                     if (value <= 0.0) continue
+                    if (value > 9_999_999) continue
                     nums.add(Num(display, value, hasKeyword))
                 }
             }
         }
         if (nums.isEmpty()) return null
-        // 有关键词标注的数字优先；都在同一行时取最大值
         val keywordNums = nums.filter { it.hasKeyword }
         val pool = if (keywordNums.isNotEmpty()) keywordNums else nums
         return pool.maxByOrNull { it.value }?.display
@@ -132,5 +143,244 @@ object OcrHelper {
             }
         }
         return rows
+    }
+
+    // ================== 内部：LED 显示屏预处理 ==================
+
+    /**
+     * 地磅 LED 屏预处理：
+     *  1) 只保留 (绿通道 - 红通道 - 蓝通道) > T 的像素（= 纯绿色发光像素）
+     *  2) 自动裁剪到屏幕区域（绿像素的 min/max 包围盒）
+     *  3) 放大 3x
+     *  4) 反色 + 二值化 → 白底黑字（ML Kit 最喜欢的形态）
+     */
+    private fun preprocessLedScreen(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        // 1) 颜色过滤：找出"偏绿+高亮"像素
+        val greenMask = BooleanArray(w * h)
+        var minX = w; var maxX = 0; var minY = h; var maxY = 0
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val p = pixels[y * w + x]
+                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                // LED 绿屏：G 明显高于 R/B，且绝对值亮度足够（发光）
+                val isGreenLed = (g - r > 30) && (g - b > 30) && (g > 80)
+                greenMask[y * w + x] = isGreenLed
+                if (isGreenLed) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        // 2) 裁剪包围盒（+ 小余量；无效则回退全图）
+        val boxValid = (maxX - minX > 20) && (maxY - minY > 8)
+        val cx = if (boxValid) minX else 0
+        val cy = if (boxValid) minY else 0
+        val cw = if (boxValid) (maxX - minX + 1) else w
+        val ch = if (boxValid) (maxY - minY + 1) else h
+
+        // 3) 二值化到白底黑字：绿像素=黑（保留字体），其他=白
+        val bwPixels = IntArray(cw * ch)
+        val white = Color.WHITE
+        val black = Color.BLACK
+        for (y in 0 until ch) {
+            for (x in 0 until cw) {
+                val origIdx = (cy + y) * w + (cx + x)
+                bwPixels[y * cw + x] = if (greenMask[origIdx]) black else white
+            }
+        }
+
+        var out = Bitmap.createBitmap(cw, ch, Bitmap.Config.ARGB_8888)
+        out.setPixels(bwPixels, 0, cw, 0, 0, cw, ch)
+
+        // 4) 放大 3x（让 ML Kit 能看清数码管笔划）
+        val scale = 3
+        out = Bitmap.createScaledBitmap(out, cw * scale, ch * scale, true)
+
+        // 5) 再一次二值化（放大后的插值会产生灰色过渡，纯黑白更清晰）
+        val sw = out.width; val sh = out.height
+        val sp = IntArray(sw * sh)
+        out.getPixels(sp, 0, sw, 0, 0, sw, sh)
+        for (i in sp.indices) {
+            val gray = (Color.red(sp[i]) + Color.green(sp[i]) + Color.blue(sp[i])) / 3
+            sp[i] = if (gray < 160) black else white
+        }
+        val out2 = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888)
+        out2.setPixels(sp, 0, sw, 0, 0, sw, sh)
+        out.recycle()
+        return out2
+    }
+
+    // ================== 内部：七段数码管像素识别 fallback ==================
+
+    /**
+     * 七段数码管（a~g）：
+     *   aaa
+     *  f   b
+     *  f   b
+     *   ggg
+     *  e   c
+     *  e   c
+     *   ddd
+     *
+     * 每个数字 = 7 段亮灭的固定组合。
+     * 我们把单个数码框划分为 3 行 × 3 列 = 9 个格子，
+     * 统计每个格子内"黑像素密度"，超过阈值判为"亮段"，然后查表得数字。
+     */
+    private fun recognizeSevenSegmentDigits(binarized: Bitmap): String? {
+        val w = binarized.width; val h = binarized.height
+        if (w < 20 || h < 10) return null
+        val pixels = IntArray(w * h)
+        binarized.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        // 1) 列投影找数字分隔：统计每列黑色像素占比，<0.5% 就是分隔缝
+        val colDensity = FloatArray(w)
+        for (x in 0 until w) {
+            var count = 0
+            for (y in 0 until h) {
+                if (pixels[y * w + x] == Color.BLACK) count++
+            }
+            colDensity[x] = count.toFloat() / h
+        }
+        val separators = mutableListOf<Int>()
+        val threshold = 0.005f
+        var inGap = false
+        for (x in 0 until w) {
+            if (colDensity[x] < threshold) {
+                if (!inGap) { separators.add(x); inGap = true }
+            } else { inGap = false }
+        }
+        if (separators.size < 2) {
+            // 没找到分隔就全图当一个数字识别（太罕见，直接返回 null）
+            return null
+        }
+        // 2) 切出每个数字的 x 区间
+        val digitRanges = mutableListOf<Rect>()
+        for (i in 0 until separators.size - 1) {
+            val start = separators[i]; val end = separators[i + 1]
+            // 找到该区间内 y 方向的实际黑像素范围（去掉上下空白）
+            var yMin = h; var yMax = 0
+            var hasAny = false
+            for (x in start until end) {
+                for (y in 0 until h) {
+                    if (pixels[y * w + x] == Color.BLACK) {
+                        hasAny = true
+                        if (y < yMin) yMin = y
+                        if (y > yMax) yMax = y
+                    }
+                }
+            }
+            if (!hasAny) continue
+            val dw = end - start; val dh = yMax - yMin
+            // 过窄的不是数字（小数点 / 单位文字等）
+            if (dw < h * 0.18 || dh < h * 0.3) continue
+            digitRanges.add(Rect(start, yMin, end, yMax))
+        }
+        if (digitRanges.isEmpty()) return null
+
+        val sb = StringBuilder()
+        for (rect in digitRanges) {
+            val digit = matchSevenSegment(pixels, w, h, rect)
+            if (digit != null) sb.append(digit)
+        }
+
+        val raw = sb.toString()
+        if (raw.isBlank()) return null
+        // 只取数字序列里的合理数字（地磅一般 3~6 位数）
+        val m = numberRegex.find(raw) ?: return null
+        val value = m.value.toDoubleOrNull() ?: return null
+        if (value <= 0) return null
+        return m.value
+    }
+
+    /** 对一个数字的包围盒内 9 宫格采样，匹配 0-9 段码 */
+    private fun matchSevenSegment(pixels: IntArray, picW: Int, picH: Int, r: Rect): Char? {
+        val dw = r.width(); val dh = r.height()
+        if (dw < 3 || dh < 3) return null
+        // 9 宫格：3 行 × 3 列
+        val w3 = dw / 3.0; val h3 = dh / 3.0
+        val densities = FloatArray(9)
+        for (gi in 0..8) {
+            val row = gi / 3; val col = gi % 3
+            val x0 = (r.left + col * w3).toInt().coerceAtLeast(0)
+            val x1 = (r.left + (col + 1) * w3).toInt().coerceAtMost(picW)
+            val y0 = (r.top + row * h3).toInt().coerceAtLeast(0)
+            val y1 = (r.top + (row + 1) * h3).toInt().coerceAtMost(picH)
+            var total = 0; var black = 0
+            for (y in y0 until y1) {
+                for (x in x0 until x1) {
+                    total++
+                    if (pixels[y * picW + x] == Color.BLACK) black++
+                }
+            }
+            densities[gi] = if (total == 0) 0f else black.toFloat() / total
+        }
+        // 7 段对应的宫格：
+        //   a = row0 col1     b = row1 col2     c = row2 col2
+        //   d = row2 col1     e = row2 col0     f = row1 col0
+        //   g = row1 col1
+        val T = 0.22f  // 段亮阈值（七段数码管每段是细条，密度不用太高）
+        val a = densities[1] > T
+        val b = densities[5] > T
+        val c = densities[8] > T
+        val d = densities[7] > T
+        val e = densities[6] > T
+        val f = densities[3] > T
+        val g = densities[4] > T
+
+        // 查表（顺序 a,b,c,d,e,f,g）
+        return when {
+            a && b && c && d && e && f && !g -> '8'
+            a && b && c && d && e && f &&  g -> '8'  // 残影容忍
+            a && b && c && d && f && !e &&  g -> '9'
+            a && b && c && d && !e && !f && !g -> '0'.takeIf { false } ?: '0'
+            !a && b && c && !d && !e && !f && !g -> '1'
+            a && b && !c && d && e && !f &&  g -> '2'
+            a && b && c && d && !e && !f &&  g -> '3'
+            !a && b && c && !d && !e && f &&  g -> '4'
+            a && !b && c && d && !e && f &&  g -> '5'
+            a && !b && c && d && e && f &&  g -> '6'
+            a && b && c && !d && !e && !f && !g -> '7'
+            a && b && c && d && e && !f &&  g -> '9'  // 近似 9
+            a && !b && !c && d && e && f &&  g -> '6'  // 近似 6
+            // 兜底：如果段数匹配不上，选最接近的数字（Hamming 距离）
+            else -> closestDigit(a, b, c, d, e, f, g)
+        }
+    }
+
+    private fun closestDigit(a: Boolean, b: Boolean, c: Boolean,
+                             d: Boolean, e: Boolean, f: Boolean, g: Boolean): Char? {
+        // 每个数字的 7 段标准：下标 [a,b,c,d,e,f,g]
+        val pattern = intArrayOf(
+            if (a) 1 else 0, if (b) 1 else 0, if (c) 1 else 0,
+            if (d) 1 else 0, if (e) 1 else 0, if (f) 1 else 0, if (g) 1 else 0
+        )
+        val digits = listOf(
+            Triple('0', intArrayOf(1,1,1,1,1,1,0), 6),
+            Triple('1', intArrayOf(0,1,1,0,0,0,0), 2),
+            Triple('2', intArrayOf(1,1,0,1,1,0,1), 5),
+            Triple('3', intArrayOf(1,1,1,1,0,0,1), 5),
+            Triple('4', intArrayOf(0,1,1,0,0,1,1), 4),
+            Triple('5', intArrayOf(1,0,1,1,0,1,1), 5),
+            Triple('6', intArrayOf(1,0,1,1,1,1,1), 6),
+            Triple('7', intArrayOf(1,1,1,0,0,0,0), 3),
+            Triple('8', intArrayOf(1,1,1,1,1,1,1), 7),
+            Triple('9', intArrayOf(1,1,1,1,0,1,1), 6),
+        )
+        var best: Char? = null; var minDist = 99
+        for ((digit, std, _) in digits) {
+            var dist = 0
+            for (i in 0..6) if (pattern[i] != std[i]) dist++
+            if (dist < minDist) { minDist = dist; best = digit }
+        }
+        // Hamming 距离 ≤3 才接受（太差就放弃，避免误读）
+        return if (minDist <= 3) best else null
     }
 }
