@@ -134,6 +134,9 @@ class LedgerReviewActivity : AppCompatActivity() {
         holder.etGross.addTextChangedListener(watcher)
         holder.etTare.addTextChangedListener(watcher)
 
+        // TextWatcher 在 setText 之后才注册，初始净重需要主动计算一次，否则显示 0
+        holder.tvNet.text = Record.formatNumber((row.gross - row.tare).coerceAtLeast(0.0))
+
         item.btnRowDelete.setOnClickListener {
             binding.llRows.removeView(holder.root)
             rowHolders.remove(holder)

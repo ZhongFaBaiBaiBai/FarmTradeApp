@@ -53,19 +53,24 @@ object OcrHelper {
         if (n3 != null) return n3
 
         // —— 策略 4：纸张裁剪 + 3x 放大 + 灰度增强 + 二值化 + ±12° 旋转
+        // 所有变体都跑一遍，取识别到的"最大数字"——手写截断碎片一定比完整数字小
         val paperScaled = cropAndScalePaper(bitmap)
-        val n5 = runMlKit(paperScaled).let { pickLargestNumber(it) }
-        if (n5 != null) return n5
+        val paperCandidates = mutableListOf<Double>()
+        runMlKit(paperScaled).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
         val enhanced = enhanceGrayscaleContrast(paperScaled)
-        val n5b = runMlKit(enhanced).let { pickLargestNumber(it) }
-        if (n5b != null) return n5b
+        runMlKit(enhanced).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
         val binary = binarizeOtsu(enhanced)
-        val n5c = runMlKit(binary).let { pickLargestNumber(it) }
-        if (n5c != null) return n5c
+        runMlKit(binary).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
         for (angle in listOf(-12f, 12f)) {
-            val rotated = rotateBitmap(binary, angle)
-            val n6 = runMlKit(rotated).let { pickLargestNumber(it) }
-            if (n6 != null) return n6
+            runMlKit(rotateBitmap(enhanced, angle)).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
+            runMlKit(rotateBitmap(binary, angle)).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
+        }
+        if (paperCandidates.isNotEmpty()) {
+            // 优先 3 位以上的数（重量场景），没有再退回最大
+            val best = paperCandidates.filter { it >= 100 }.maxOrNull() ?: paperCandidates.maxOrNull()
+            if (best != null) {
+                return if (best == best.toLong().toDouble()) best.toLong().toString() else best.toString()
+            }
         }
 
         // —— 策略 5：原图 + 2x 放大兜底
@@ -76,33 +81,63 @@ object OcrHelper {
     }
 
     suspend fun recognizeLedgerRows(bitmap: Bitmap): List<LedgerRow> {
+        // 不再"第一个 pass 出结果就返回"——手写识别可能把 2150 截断成 50，
+        // 而是把所有 pass 的候选算式都收集起来，最后做去重/去碎片，选最可信的结果。
+        val candidates = LinkedHashMap<String, LedgerRow>()
+
         // Pass 1: 原图直接识别
-        runMlKit(bitmap).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+        runMlKit(bitmap).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
         // Pass 2: 纸张裁剪 + 3x 放大
         val scaled = cropAndScalePaper(bitmap)
-        runMlKit(scaled).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+        runMlKit(scaled).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
         // Pass 3: 灰度对比度增强
         val enhanced = enhanceGrayscaleContrast(scaled)
-        runMlKit(enhanced).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+        runMlKit(enhanced).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
         // Pass 4: Otsu 二值化
         val binary = binarizeOtsu(enhanced)
-        runMlKit(binary).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+        runMlKit(binary).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
-        // Pass 5: 二值化图 ±12° 旋转重试
+        // Pass 5: ±12° 旋转重试（灰度图 + 二值化图都试）
         for (angle in listOf(-12f, 12f)) {
-            val rotated = rotateBitmap(binary, angle)
-            val rows = runMlKit(rotated).let { extractLedgerRows(it) }
-            if (rows.isNotEmpty()) return rows
+            runMlKit(rotateBitmap(enhanced, angle)).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+            runMlKit(rotateBitmap(binary, angle)).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
         }
 
         // Pass 6: 原图 2x 放大兜底
         val scaled2 = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
-        val rows6 = runMlKit(scaled2).let { extractLedgerRows(it) }
+        runMlKit(scaled2).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
         scaled2.recycle()
-        return rows6
+
+        return dropFragmentRows(candidates.values.toList())
+    }
+
+    /** 去重 key（四舍五入到个位后相同的算同一行） */
+    private fun keyOf(r: LedgerRow): String = "${Math.round(r.gross)}_${Math.round(r.tare)}"
+
+    /**
+     * 去碎片：手写识别可能把 "2150-812" 截断成 "50-8"。
+     * 若小行的毛重/车重数字串都是大行数字串的后缀、且差 10 倍以上，判定小行为碎片并丢弃。
+     */
+    private fun dropFragmentRows(rows: List<LedgerRow>): List<LedgerRow> {
+        if (rows.size <= 1) return rows
+        val sorted = rows.sortedByDescending { it.gross }
+        val kept = mutableListOf<LedgerRow>()
+        for (r in sorted) {
+            val gs = r.gross.toLong().toString()
+            val ts = r.tare.toLong().toString()
+            val isFragment = kept.any { big ->
+                val bgs = big.gross.toLong().toString()
+                val bts = big.tare.toLong().toString()
+                big.gross >= r.gross * 10 &&
+                    bgs.endsWith(gs) &&
+                    (bts.endsWith(ts) || r.tare < 10)
+            }
+            if (!isFragment) kept.add(r)
+        }
+        return kept
     }
 
     // ================== 过磅单多字段识别 ==================
@@ -222,8 +257,8 @@ object OcrHelper {
         // 皮重缺失时用净重兜底推算
         if (tare <= 0.0 && net > 0.0) tare = gross - net
         if (tare <= 0.0 || gross <= tare) return null
-        // 合理性：毛重 < 100 吨
-        if (gross > 100000) return null
+        // 合理性：地磅毛重≥100kg、皮重≥50kg，毛重 < 100 吨
+        if (gross < 100.0 || tare < 50.0 || gross > 100000) return null
 
         return WeighingSlip(type, gross, tare, net, price?.takeIf { it > 0 }, dateTime)
     }
@@ -351,11 +386,11 @@ object OcrHelper {
         return rows
     }
 
-    /** 算式合理性：毛重>皮重，毛重 10~999999，皮重 >= 1 */
+    /** 算式合理性：毛重>皮重；地磅场景毛重通常≥100kg、皮重≥50kg（挡手写截断碎片如 50-8）；皮重≥1 */
     private fun isValidLedgerRow(gross: Double, tare: Double): Boolean {
         if (gross <= tare) return false
-        if (gross < 10 || gross > 999999) return false
-        if (tare < 1) return false
+        if (gross < 100 || gross > 999999) return false
+        if (tare < 50) return false
         return true
     }
 
