@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ImageDecoder
-import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -43,81 +42,138 @@ object OcrHelper {
     // ================== 公开入口 ==================
 
     suspend fun recognizeFromBitmap(bitmap: Bitmap): String? {
-        // —— 策略 1：先直接交给 ML Kit（正常文本/记录本场景快速成功）
-        val r1 = runMlKit(bitmap)
-        val n1 = pickLargestNumber(r1)
-        if (n1 != null) return n1
+        // 相机原图可达上千万像素，先降采样到最大边 1600（OCR 不需要更高分辨率，
+        // 否则后续 3x 放大管线会 OOM 闪退）；返回的工作图由本函数负责回收
+        val src = downscaleForOcr(bitmap)
+        try {
+            // —— 策略 1：先直接交给 ML Kit（正常文本/记录本场景快速成功）
+            val r1 = runMlKit(src)
+            val n1 = pickLargestNumber(r1)
+            if (n1 != null) return n1
 
-        // —— 策略 2：LED 预处理管线 → ML Kit
-        val preprocessed = preprocessLedScreen(bitmap)
-        val r2 = runMlKit(preprocessed)
-        val n2 = pickLargestNumber(r2)
-        if (n2 != null) return n2
+            // —— 策略 2：LED 预处理管线 → ML Kit
+            val preprocessed = preprocessLedScreen(src)
+            try {
+                val r2 = runMlKit(preprocessed)
+                val n2 = pickLargestNumber(r2)
+                if (n2 != null) return n2
 
-        // —— 策略 3：七段数码管像素识别 fallback
-        val n3 = recognizeSevenSegmentDigits(preprocessed)
-        if (n3 != null) return n3
-
-        // —— 策略 4：纸张裁剪 + 3x 放大 + 灰度增强 + 二值化 + ±12° 旋转
-        // 所有变体都跑一遍，取识别到的"最大数字"——手写截断碎片一定比完整数字小
-        val paperScaled = cropAndScalePaper(bitmap)
-        val paperCandidates = mutableListOf<Double>()
-        runMlKit(paperScaled).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
-        val enhanced = enhanceGrayscaleContrast(paperScaled)
-        runMlKit(enhanced).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
-        val binary = binarizeOtsu(enhanced)
-        runMlKit(binary).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
-        for (angle in listOf(-12f, 12f)) {
-            runMlKit(rotateBitmap(enhanced, angle)).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
-            runMlKit(rotateBitmap(binary, angle)).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
-        }
-        if (paperCandidates.isNotEmpty()) {
-            // 优先 3 位以上的数（重量场景），没有再退回最大
-            val best = paperCandidates.filter { it >= 100 }.maxOrNull() ?: paperCandidates.maxOrNull()
-            if (best != null) {
-                return if (best == best.toLong().toDouble()) best.toLong().toString() else best.toString()
+                // —— 策略 3：七段数码管像素识别 fallback
+                val n3 = recognizeSevenSegmentDigits(preprocessed)
+                if (n3 != null) return n3
+            } finally {
+                preprocessed.recycle()
             }
-        }
 
-        // —— 策略 5：原图 + 2x 放大兜底
-        val scaled = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
-        val n4 = runMlKit(scaled).let { pickLargestNumber(it) }
-        scaled.recycle()
-        return n4
+            // —— 策略 4：纸张裁剪 + 放大 + 灰度增强 + 二值化 + ±12° 旋转
+            // 所有变体都跑一遍，取识别到的"最大数字"——手写截断碎片一定比完整数字小
+            val paperScaled = cropAndScalePaper(src)
+            try {
+                val paperCandidates = mutableListOf<Double>()
+                runMlKit(paperScaled).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
+                val enhanced = enhanceGrayscaleContrast(paperScaled)
+                try {
+                    runMlKit(enhanced).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
+                    val binary = binarizeOtsu(enhanced)
+                    try {
+                        runMlKit(binary).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
+                        for (angle in listOf(-12f, 12f)) {
+                            val rotE = rotateBitmap(enhanced, angle)
+                            try {
+                                runMlKit(rotE).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
+                            } finally { rotE.recycle() }
+                            val rotB = rotateBitmap(binary, angle)
+                            try {
+                                runMlKit(rotB).let { pickLargestNumber(it) }?.toDoubleOrNull()?.let { paperCandidates.add(it) }
+                            } finally { rotB.recycle() }
+                        }
+                    } finally {
+                        binary.recycle()
+                    }
+                } finally {
+                    enhanced.recycle()
+                }
+                if (paperCandidates.isNotEmpty()) {
+                    // 优先 3 位以上的数（重量场景），没有再退回最大
+                    val best = paperCandidates.filter { it >= 100 }.maxOrNull() ?: paperCandidates.maxOrNull()
+                    if (best != null) {
+                        return if (best == best.toLong().toDouble()) best.toLong().toString() else best.toString()
+                    }
+                }
+            } finally {
+                // cropAndScalePaper 在裁剪失败时可能返回原图本身，那种情况不回收（由外层 finally 处理）
+                if (paperScaled !== src) paperScaled.recycle()
+            }
+
+            // —— 策略 5：原图 + 2x 放大兜底
+            val scaled = Bitmap.createScaledBitmap(src, src.width * 2, src.height * 2, true)
+            try {
+                return runMlKit(scaled).let { pickLargestNumber(it) }
+            } finally {
+                scaled.recycle()
+            }
+        } finally {
+            if (src !== bitmap) src.recycle()
+        }
     }
 
     suspend fun recognizeLedgerRows(bitmap: Bitmap): List<LedgerRow> {
         // 不再"第一个 pass 出结果就返回"——手写识别可能把 2150 截断成 50，
         // 而是把所有 pass 的候选算式都收集起来，最后做去重/去碎片，选最可信的结果。
+        val src = downscaleForOcr(bitmap)
         val candidates = LinkedHashMap<String, LedgerRow>()
+        try {
+            // Pass 1: 原图直接识别
+            runMlKit(src).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
-        // Pass 1: 原图直接识别
-        runMlKit(bitmap).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+            // Pass 2: 纸张裁剪 + 放大
+            val scaled = cropAndScalePaper(src)
+            try {
+                runMlKit(scaled).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
-        // Pass 2: 纸张裁剪 + 3x 放大
-        val scaled = cropAndScalePaper(bitmap)
-        runMlKit(scaled).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+                // Pass 3: 灰度对比度增强
+                val enhanced = enhanceGrayscaleContrast(scaled)
+                try {
+                    runMlKit(enhanced).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
-        // Pass 3: 灰度对比度增强
-        val enhanced = enhanceGrayscaleContrast(scaled)
-        runMlKit(enhanced).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+                    // Pass 4: Otsu 二值化
+                    val binary = binarizeOtsu(enhanced)
+                    try {
+                        runMlKit(binary).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
 
-        // Pass 4: Otsu 二值化
-        val binary = binarizeOtsu(enhanced)
-        runMlKit(binary).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+                        // Pass 5: ±12° 旋转重试（灰度图 + 二值化图都试）
+                        for (angle in listOf(-12f, 12f)) {
+                            val rotE = rotateBitmap(enhanced, angle)
+                            try {
+                                runMlKit(rotE).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+                            } finally { rotE.recycle() }
+                            val rotB = rotateBitmap(binary, angle)
+                            try {
+                                runMlKit(rotB).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+                            } finally { rotB.recycle() }
+                        }
+                    } finally {
+                        binary.recycle()
+                    }
+                } finally {
+                    enhanced.recycle()
+                }
+            } finally {
+                if (scaled !== src) scaled.recycle()
+            }
 
-        // Pass 5: ±12° 旋转重试（灰度图 + 二值化图都试）
-        for (angle in listOf(-12f, 12f)) {
-            runMlKit(rotateBitmap(enhanced, angle)).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
-            runMlKit(rotateBitmap(binary, angle)).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+            // Pass 6: 原图 2x 放大兜底
+            val scaled2 = Bitmap.createScaledBitmap(src, src.width * 2, src.height * 2, true)
+            try {
+                runMlKit(scaled2).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+            } finally {
+                scaled2.recycle()
+            }
+
+            return dropFragmentRows(candidates.values.toList())
+        } finally {
+            if (src !== bitmap) src.recycle()
         }
-
-        // Pass 6: 原图 2x 放大兜底
-        val scaled2 = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
-        runMlKit(scaled2).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
-        scaled2.recycle()
-
-        return dropFragmentRows(candidates.values.toList())
     }
 
     /** 去重 key（四舍五入到个位后相同的算同一行） */
@@ -182,28 +238,49 @@ object OcrHelper {
      * 判定成功条件：毛重>0 且（皮重>0 或 净重>0）。普通文字/地磅屏/记录本图片不会误判。
      */
     suspend fun recognizeWeighingSlip(bitmap: Bitmap): WeighingSlip? {
-        // Pass 1: 原图直接识别
-        runMlKit(bitmap)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+        val src = downscaleForOcr(bitmap)
+        try {
+            // Pass 1: 原图直接识别
+            runMlKit(src)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
 
-        // Pass 2: 纸张裁剪 + 3x 放大
-        val paperScaled = cropAndScalePaper(bitmap)
-        runMlKit(paperScaled)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+            // Pass 2: 纸张裁剪 + 放大
+            val paperScaled = cropAndScalePaper(src)
+            try {
+                runMlKit(paperScaled)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
 
-        // Pass 3: 灰度对比度增强
-        val enhanced = enhanceGrayscaleContrast(paperScaled)
-        runMlKit(enhanced)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+                // Pass 3: 灰度对比度增强
+                val enhanced = enhanceGrayscaleContrast(paperScaled)
+                try {
+                    runMlKit(enhanced)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
 
-        // Pass 4: Otsu 二值化
-        val binary = binarizeOtsu(enhanced)
-        runMlKit(binary)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+                    // Pass 4: Otsu 二值化
+                    val binary = binarizeOtsu(enhanced)
+                    try {
+                        runMlKit(binary)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
 
-        // Pass 5: ±12° 旋转重试（在二值化图上）
-        for (angle in listOf(-12f, 12f)) {
-            val rotated = rotateBitmap(binary, angle)
-            runMlKit(rotated)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+                        // Pass 5: ±12° 旋转重试（在二值化图上）
+                        for (angle in listOf(-12f, 12f)) {
+                            val rotated = rotateBitmap(binary, angle)
+                            try {
+                                runMlKit(rotated)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+                            } finally {
+                                rotated.recycle()
+                            }
+                        }
+                    } finally {
+                        binary.recycle()
+                    }
+                } finally {
+                    enhanced.recycle()
+                }
+            } finally {
+                if (paperScaled !== src) paperScaled.recycle()
+            }
+
+            return null
+        } finally {
+            if (src !== bitmap) src.recycle()
         }
-
-        return null
     }
 
     private fun extractWeighingSlip(visionText: Text): WeighingSlip? {
@@ -456,7 +533,7 @@ object OcrHelper {
         val pixels = IntArray(w * h)
         src.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        // 1) 转灰度 + 找 min/max
+        // 1) 转灰度 + 找 min/max（灰度值暂存，第二趟复用 pixels 数组输出，省一份大数组）
         val gray = IntArray(w * h)
         var minG = 255; var maxG = 0
         for (i in pixels.indices) {
@@ -466,15 +543,14 @@ object OcrHelper {
             if (g < minG) minG = g
             if (g > maxG) maxG = g
         }
-        // 2) 线性拉伸
+        // 2) 线性拉伸，结果直接写回 pixels
         val range = (maxG - minG).coerceAtLeast(1)
-        val out = IntArray(w * h)
         for (i in gray.indices) {
             val stretched = ((gray[i] - minG) * 255 / range).coerceIn(0, 255)
-            out[i] = Color.rgb(stretched, stretched, stretched)
+            pixels[i] = Color.rgb(stretched, stretched, stretched)
         }
         val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        result.setPixels(out, 0, w, 0, 0, w, h)
+        result.setPixels(pixels, 0, w, 0, 0, w, h)
         return result
     }
 
@@ -511,15 +587,14 @@ object OcrHelper {
             if (variance > maxVar) { maxVar = variance; bestTh = th }
         }
 
-        // 二值化
+        // 二值化（结果直接写回 pixels，省一份 w*h 大数组）
         val black = Color.BLACK; val white = Color.WHITE
-        val out = IntArray(w * h)
         for (i in pixels.indices) {
             val g = (Color.red(pixels[i]) * 299 + Color.green(pixels[i]) * 587 + Color.blue(pixels[i]) * 114) / 1000
-            out[i] = if (g < bestTh) black else white
+            pixels[i] = if (g < bestTh) black else white
         }
         val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        result.setPixels(out, 0, w, 0, 0, w, h)
+        result.setPixels(pixels, 0, w, 0, 0, w, h)
         return result
     }
 
@@ -536,30 +611,49 @@ object OcrHelper {
         val pixels = IntArray(w * h)
         src.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        var minX = w; var maxX = 0; var minY = h; var maxY = 0
-        var count = 0
-        for (y in 0 until h step 2) {
-            for (x in 0 until w step 2) {
-                val p = pixels[y * w + x]
-                val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
-                val maxc = maxOf(r, g, b); val minc = minOf(r, g, b)
-                // 浅色纸张（白/浅蓝/浅黄/暗光纸）：亮度较高、饱和度低
-                val isPaper = minc > 110 && (maxc - minc) < 80
-                if (isPaper) {
-                    count++
-                    if (x < minX) minX = x
-                    if (x > maxX) maxX = x
-                    if (y < minY) minY = y
-                    if (y > maxY) maxY = y
+        // 单趟扫描：minc>mincThr 且 (maxc-minc)<satThr 的浅色像素视为纸张
+        // 返回 [minX,minY,maxX,maxY]，无效返回 null
+        fun scanPaper(mincThr: Int, satThr: Int): IntArray? {
+            var minX = w; var maxX = 0; var minY = h; var maxY = 0
+            var count = 0
+            for (y in 0 until h step 2) {
+                for (x in 0 until w step 2) {
+                    val p = pixels[y * w + x]
+                    val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
+                    val maxc = maxOf(r, g, b); val minc = minOf(r, g, b)
+                    val isPaper = minc > mincThr && (maxc - minc) < satThr
+                    if (isPaper) {
+                        count++
+                        if (x < minX) minX = x
+                        if (x > maxX) maxX = x
+                        if (y < minY) minY = y
+                        if (y > maxY) maxY = y
+                    }
                 }
             }
+            val sampled = (w / 2) * (h / 2)
+            if (count < sampled * 0.08) return null
+            val bw = maxX - minX; val bh = maxY - minY
+            if (bw < w * 0.15 || bh < h * 0.15) return null
+            return intArrayOf(minX, minY, maxX, maxY)
         }
 
-        // 纸张像素占比 < 8% → 判定失败返回原图
-        val sampled = (w / 2) * (h / 2)
-        if (count < sampled * 0.08) return src
+        // 第一趟：严格阈值（更亮更素）。真实手写本照片实测：普通阈值会把水泥地
+        // 也当成纸（包围盒=全图，裁剪失效）；严格阈值能收紧到本子区域。
+        // 但严格阈值只在"纸占画面中一小块"时采用（包围盒面积 < 75% 画面）；
+        // 纸铺满画面的过磅单场景 bbox≈全图，此时回退普通阈值，保持原行为。
+        var box: IntArray? = null
+        val strict = scanPaper(160, 80)
+        if (strict != null) {
+            val sArea = (strict[2] - strict[0]).toLong() * (strict[3] - strict[1])
+            if (sArea < 0.75 * w.toLong() * h) box = strict
+        }
+        // 第二趟：普通阈值（原逻辑）
+        if (box == null) box = scanPaper(110, 80)
+        if (box == null) return src
+
+        val minX = box[0]; val minY = box[1]; val maxX = box[2]; val maxY = box[3]
         val bw = maxX - minX; val bh = maxY - minY
-        if (bw < w * 0.15 || bh < h * 0.15) return src
 
         // 留 5% 余量
         val pad = (maxOf(bw, bh) * 0.05).toInt()
@@ -577,19 +671,37 @@ object OcrHelper {
     }
 
     /**
-     * 纸张裁剪 + 限制最大边 1200px + 3x 放大。
-     * 限制原始尺寸防止 3x 后超过 ML Kit 图像大小限制 / 内存溢出。
+     * 纸张裁剪 + 限制原始最大边 1200px + 放大（目标输出最大边 2400px，倍率 1~3x 自适应）。
+     * 限制尺寸防止放大后超过 ML Kit 图像大小限制 / 内存溢出（相机原图 3x 放大可达上百 MB）。
      */
-    private fun cropAndScalePaper(src: Bitmap, factor: Int = 3): Bitmap {
+    private fun cropAndScalePaper(src: Bitmap): Bitmap {
         val paper = cropPaperRegion(src)
         val cap = 1200
         val p = if (maxOf(paper.width, paper.height) > cap) {
             val ratio = cap.toFloat() / maxOf(paper.width, paper.height)
-            Bitmap.createScaledBitmap(paper, (paper.width * ratio).toInt(), (paper.height * ratio).toInt(), true)
+            val capped = Bitmap.createScaledBitmap(paper, (paper.width * ratio).toInt(), (paper.height * ratio).toInt(), true)
+            if (paper !== src) paper.recycle()  // 释放裁剪中间图
+            capped
         } else {
             paper
         }
-        return Bitmap.createScaledBitmap(p, p.width * factor, p.height * factor, true)
+        val factor = (2400f / maxOf(p.width, p.height)).coerceIn(1f, 3f)
+        val out = Bitmap.createScaledBitmap(p, (p.width * factor).toInt(), (p.height * factor).toInt(), true)
+        if (p !== src && out !== p) p.recycle()  // p 是裁剪图/限幅图时释放（===src 时不能动）
+        return out
+    }
+
+    /**
+     * OCR 入口统一降采样：相机原图常达 3000~4000px 边长（ARGB 约 48MB），
+     * 后续预处理还要放大 2~3 倍，不先降采样极易 OOM 闪退。
+     * OCR 识别在最大边 1600px 下精度足够。返回工作图（新图由各识别函数在 finally 中回收，
+     * 原图由调用方负责回收——同一张图可能连续传给多个识别函数）。
+     */
+    private fun downscaleForOcr(src: Bitmap, maxEdge: Int = 1600): Bitmap {
+        val m = maxOf(src.width, src.height)
+        if (m <= maxEdge) return src
+        val ratio = maxEdge.toFloat() / m
+        return Bitmap.createScaledBitmap(src, (src.width * ratio).toInt(), (src.height * ratio).toInt(), true)
     }
 
     // ================== 内部：LED 显示屏预处理 ==================
@@ -610,6 +722,7 @@ object OcrHelper {
         // 1) 颜色过滤：找出"偏绿+高亮"像素
         val greenMask = BooleanArray(w * h)
         var minX = w; var maxX = 0; var minY = h; var maxY = 0
+        var greenCount = 0
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val p = pixels[y * w + x]
@@ -618,12 +731,20 @@ object OcrHelper {
                 val isGreenLed = (g - r > 30) && (g - b > 30) && (g > 80)
                 greenMask[y * w + x] = isGreenLed
                 if (isGreenLed) {
+                    greenCount++
                     if (x < minX) minX = x
                     if (x > maxX) maxX = x
                     if (y < minY) minY = y
                     if (y > maxY) maxY = y
                 }
             }
+        }
+
+        // 绿像素占比异常（全图泛绿=户外植物/绿背景，或完全没有绿像素）都不是 LED 屏，
+        // 返回 1x1 占位图让后续 ML Kit/七段识别快速失败，避免对全白图放大浪费内存
+        val greenRatio = greenCount.toFloat() / (w * h)
+        if (greenCount == 0 || greenRatio > 0.4f) {
+            return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         }
 
         // 2) 裁剪包围盒（+ 小余量；无效则回退全图）
@@ -644,15 +765,18 @@ object OcrHelper {
             }
         }
 
-        var out = Bitmap.createBitmap(cw, ch, Bitmap.Config.ARGB_8888)
-        out.setPixels(bwPixels, 0, cw, 0, 0, cw, ch)
+        val base = Bitmap.createBitmap(cw, ch, Bitmap.Config.ARGB_8888)
+        base.setPixels(bwPixels, 0, cw, 0, 0, cw, ch)
 
-        // 4) 放大 3x（让 ML Kit 能看清数码管笔划）
-        val scale = 3
-        out = Bitmap.createScaledBitmap(out, cw * scale, ch * scale, true)
+        // 4) 放大（让 ML Kit 能看清数码管笔划），倍率自适应：输出最大边 ≤1800px，
+        //    防止包围盒接近全图时固定 3x 放大产生上百 MB 位图导致 OOM 闪退
+        val factor = (1800f / maxOf(cw, ch)).coerceIn(1f, 3f)
+        val sw = (cw * factor).toInt().coerceAtLeast(1)
+        val sh = (ch * factor).toInt().coerceAtLeast(1)
+        val out = Bitmap.createScaledBitmap(base, sw, sh, true)
+        base.recycle()
 
         // 5) 再一次二值化（放大后的插值会产生灰色过渡，纯黑白更清晰）
-        val sw = out.width; val sh = out.height
         val sp = IntArray(sw * sh)
         out.getPixels(sp, 0, sw, 0, 0, sw, sh)
         for (i in sp.indices) {
@@ -678,8 +802,9 @@ object OcrHelper {
      *   ddd
      *
      * 每个数字 = 7 段亮灭的固定组合。
-     * 我们把单个数码框划分为 3 行 × 3 列 = 9 个格子，
-     * 统计每个格子内"黑像素密度"，超过阈值判为"亮段"，然后查表得数字。
+     * 分割：按列投影找"有内容的连续列段"（密度≥0.5%），段间 <12px 的窄缝视为
+     * 数字内部间隙合并——首尾数字位于第一条/最后一条缝隙之外，不会被切掉。
+     * 识别：每个数字框内放 7 个矩形探针，统计黑像素密度判段亮灭，Hamming 距离查表。
      */
     private fun recognizeSevenSegmentDigits(binarized: Bitmap): String? {
         val w = binarized.width; val h = binarized.height
@@ -687,55 +812,93 @@ object OcrHelper {
         val pixels = IntArray(w * h)
         binarized.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        // 1) 列投影找数字分隔：统计每列黑色像素占比，<0.5% 就是分隔缝
+        val black = BooleanArray(w * h)
+        for (i in pixels.indices) black[i] = pixels[i] == Color.BLACK
+
+        // 1) 列投影：每列黑像素占比
         val colDensity = FloatArray(w)
         for (x in 0 until w) {
             var count = 0
-            for (y in 0 until h) {
-                if (pixels[y * w + x] == Color.BLACK) count++
-            }
+            for (y in 0 until h) if (black[y * w + x]) count++
             colDensity[x] = count.toFloat() / h
         }
-        val separators = mutableListOf<Int>()
-        val threshold = 0.005f
-        var inGap = false
-        for (x in 0 until w) {
-            if (colDensity[x] < threshold) {
-                if (!inGap) { separators.add(x); inGap = true }
-            } else { inGap = false }
-        }
-        if (separators.size < 2) {
-            // 没找到分隔就全图当一个数字识别（太罕见，直接返回 null）
-            return null
-        }
-        // 2) 切出每个数字的 x 区间
-        val digitRanges = mutableListOf<Rect>()
-        for (i in 0 until separators.size - 1) {
-            val start = separators[i]; val end = separators[i + 1]
-            // 找到该区间内 y 方向的实际黑像素范围（去掉上下空白）
-            var yMin = h; var yMax = 0
-            var hasAny = false
-            for (x in start until end) {
-                for (y in 0 until h) {
-                    if (pixels[y * w + x] == Color.BLACK) {
-                        hasAny = true
-                        if (y < yMin) yMin = y
-                        if (y > yMax) yMax = y
+
+        // 2) 内容连续段：列密度≥0.02（约每列 2~3 个黑像素/百行）的连续列为一个数字候选；
+        //    阈值高于零散噪点列（单点密度≈0.008），防止琥珀残影/噪点搭桥把相邻数字连成一片；
+        //    真实段条列密度：竖段≈0.4、横段≈0.2，余量充足。
+        //    段后窄缝(<12px)仍有内容 → 合并（同一数字内部的间隙）
+        val runs = mutableListOf<IntArray>()
+        var x = 0
+        while (x < w) {
+            if (colDensity[x] >= 0.02f) {
+                val start = x
+                while (x < w && colDensity[x] >= 0.02f) x++
+                var end = x - 1
+                while (x < w) {
+                    val gapStart = x
+                    while (x < w && colDensity[x] < 0.02f) x++
+                    val gapLen = x - gapStart
+                    if (x < w && gapLen < 12) {
+                        while (x < w && colDensity[x] >= 0.02f) x++
+                        end = x - 1
+                    } else {
+                        break
                     }
                 }
+                runs.add(intArrayOf(start, end))
+            } else {
+                x++
             }
-            if (!hasAny) continue
-            val dw = end - start; val dh = yMax - yMin
-            // 过窄的不是数字（小数点 / 单位文字等）
-            if (dw < h * 0.18 || dh < h * 0.3) continue
-            digitRanges.add(Rect(start, yMin, end, yMax))
         }
-        if (digitRanges.isEmpty()) return null
+        if (runs.isEmpty()) return null
 
+        // 3) 先扫描所有数字候选框，并取整行公共顶/底：
+        //    七段数码管所有数字等高、基线对齐。数字 4 无顶段(a)/底段(d)、7 无中段以下，
+        //    若每个 run 用自身包围盒，缺顶/底段时探针坐标系会收缩错位（a 探针落到 f/b 段、
+        //    d 探针落到 c 段），导致 4 误判成 8、7 误判成 3。统一用整行最高/最低段定位。
+        //    同理数字 3/7 无左竖段(f/e)时 run 左缘右移，左探针会压到 g 横段上误亮，
+        //    因此 x 方向也用统一字宽（相邻数字中心间距）按中心定位，而不是 run 自身宽度。
+        data class DigitBox(val start: Int, val end: Int, val cx: Int)
+        val boxes = mutableListOf<DigitBox>()
+        var globalTop = h; var globalBot = 0
+        for (r in runs) {
+            val start = r[0]; val end = r[1]
+            // y 范围：该 x 区间内黑像素≥4 的行（剔除上下零散噪点）
+            var topY = h; var botY = 0
+            for (yy in 0 until h) {
+                var cnt = 0
+                for (xx in start..end) if (black[yy * w + xx]) cnt++
+                if (cnt >= 4) {
+                    if (yy < topY) topY = yy
+                    if (yy > botY) botY = yy
+                }
+            }
+            if (topY > botY) continue
+            val dw = end - start + 1; val dh = botY - topY
+            // 过窄/过矮/过宽的不是数字（小数点、单位文字等）
+            if (dw < h * 0.08f || dh < h * 0.3f || dw > h) continue
+            boxes.add(DigitBox(start, end, (start + end) / 2))
+            if (topY < globalTop) globalTop = topY
+            if (botY > globalBot) globalBot = botY
+        }
+
+        // 4) 逐数字识别（统一使用整行公共顶/底与统一字宽）
         val sb = StringBuilder()
-        for (rect in digitRanges) {
-            val digit = matchSevenSegment(pixels, w, h, rect)
-            if (digit != null) sb.append(digit)
+        if (boxes.isNotEmpty()) {
+            val gdh = (globalBot - globalTop).coerceAtLeast(1)
+            // 统一字宽：多数字取相邻中心间距的中位数；单数字按 run 宽 / 0.83 反推
+            // （完整数字 0/8 的 run 宽约为字宽的 83%）
+            val pitch = if (boxes.size >= 2) {
+                boxes.sortedBy { it.cx }.zipWithNext { a, b -> b.cx - a.cx }
+                    .sorted().let { it[it.size / 2] }
+            } else {
+                ((boxes[0].end - boxes[0].start + 1) / 0.83f).toInt()
+            }.coerceAtLeast(1)
+            for (box in boxes) {
+                val bx = box.cx - pitch / 2
+                val digit = matchSevenSegment(black, w, h, bx, globalTop, pitch, gdh)
+                if (digit != null) sb.append(digit)
+            }
         }
 
         val raw = sb.toString()
@@ -747,59 +910,50 @@ object OcrHelper {
         return m.value
     }
 
-    /** 对一个数字的包围盒内 9 宫格采样，匹配 0-9 段码 */
-    private fun matchSevenSegment(pixels: IntArray, picW: Int, picH: Int, r: Rect): Char? {
-        val dw = r.width(); val dh = r.height()
-        if (dw < 3 || dh < 3) return null
-        // 9 宫格：3 行 × 3 列
-        val w3 = dw / 3.0; val h3 = dh / 3.0
-        val densities = FloatArray(9)
-        for (gi in 0..8) {
-            val row = gi / 3; val col = gi % 3
-            val x0 = (r.left + col * w3).toInt().coerceAtLeast(0)
-            val x1 = (r.left + (col + 1) * w3).toInt().coerceAtMost(picW)
-            val y0 = (r.top + row * h3).toInt().coerceAtLeast(0)
-            val y1 = (r.top + (row + 1) * h3).toInt().coerceAtMost(picH)
-            var total = 0; var black = 0
-            for (y in y0 until y1) {
-                for (x in x0 until x1) {
-                    total++
-                    if (pixels[y * picW + x] == Color.BLACK) black++
-                }
+    /** 矩形探针密度：数字框内 (rx0,ry0)-(rx1,ry1) 相对区域中黑像素占比 */
+    private fun rectDensity(black: BooleanArray, picW: Int, picH: Int,
+                            bx: Int, by: Int, bw: Int, bh: Int,
+                            rx0: Float, ry0: Float, rx1: Float, ry1: Float): Float {
+        val x0 = (bx + bw * rx0).toInt().coerceIn(0, picW)
+        val x1 = (bx + bw * rx1).toInt().coerceIn(0, picW)
+        val y0 = (by + bh * ry0).toInt().coerceIn(0, picH)
+        val y1 = (by + bh * ry1).toInt().coerceIn(0, picH)
+        var total = 0; var cnt = 0
+        for (y in y0 until y1) {
+            val row = y * picW
+            for (xx in x0 until x1) {
+                total++
+                if (black[row + xx]) cnt++
             }
-            densities[gi] = if (total == 0) 0f else black.toFloat() / total
         }
-        // 7 段对应的宫格：
-        //   a = row0 col1     b = row1 col2     c = row2 col2
-        //   d = row2 col1     e = row2 col0     f = row1 col0
-        //   g = row1 col1
-        val T = 0.22f  // 段亮阈值（七段数码管每段是细条，密度不用太高）
-        val a = densities[1] > T
-        val b = densities[5] > T
-        val c = densities[8] > T
-        val d = densities[7] > T
-        val e = densities[6] > T
-        val f = densities[3] > T
-        val g = densities[4] > T
+        return if (total == 0) 0f else cnt.toFloat() / total
+    }
 
-        // 查表（顺序 a,b,c,d,e,f,g）
-        return when {
-            a && b && c && d && e && f && !g -> '8'
-            a && b && c && d && e && f &&  g -> '8'  // 残影容忍
-            a && b && c && d && f && !e &&  g -> '9'
-            a && b && c && d && !e && !f && !g -> '0'.takeIf { false } ?: '0'
-            !a && b && c && !d && !e && !f && !g -> '1'
-            a && b && !c && d && e && !f &&  g -> '2'
-            a && b && c && d && !e && !f &&  g -> '3'
-            !a && b && c && !d && !e && f &&  g -> '4'
-            a && !b && c && d && !e && f &&  g -> '5'
-            a && !b && c && d && e && f &&  g -> '6'
-            a && b && c && !d && !e && !f && !g -> '7'
-            a && b && c && d && e && !f &&  g -> '9'  // 近似 9
-            a && !b && !c && d && e && f &&  g -> '6'  // 近似 6
-            // 兜底：如果段数匹配不上，选最接近的数字（Hamming 距离）
-            else -> closestDigit(a, b, c, d, e, f, g)
+    /** 对一个数字框用 7 个矩形探针采样，匹配 0-9 段码 */
+    private fun matchSevenSegment(black: BooleanArray, picW: Int, picH: Int,
+                                  bx: Int, by: Int, dw: Int, dh: Int): Char? {
+        if (dw < 3 || dh < 3) return null
+
+        // 超窄字形（宽高比<0.30）= 数字 1：仅右侧一条竖笔，直接判定
+        if (dw < dh * 0.30f) {
+            val right = rectDensity(black, picW, picH, bx, by, dw, dh, 0.55f, 0.05f, 0.97f, 0.95f)
+            return if (right > 0.10f) '1' else null
         }
+
+        // 7 段矩形探针（相对数字框的比例坐标）
+        val a = rectDensity(black, picW, picH, bx, by, dw, dh, 0.12f, 0.06f, 0.88f, 0.22f)
+        val g = rectDensity(black, picW, picH, bx, by, dw, dh, 0.12f, 0.42f, 0.88f, 0.58f)
+        val d = rectDensity(black, picW, picH, bx, by, dw, dh, 0.12f, 0.78f, 0.88f, 0.95f)
+        val f = rectDensity(black, picW, picH, bx, by, dw, dh, 0.03f, 0.22f, 0.30f, 0.48f)
+        val b = rectDensity(black, picW, picH, bx, by, dw, dh, 0.70f, 0.22f, 0.97f, 0.48f)
+        val e = rectDensity(black, picW, picH, bx, by, dw, dh, 0.03f, 0.52f, 0.30f, 0.79f)
+        val c = rectDensity(black, picW, picH, bx, by, dw, dh, 0.70f, 0.52f, 0.97f, 0.79f)
+
+        // 段亮阈值：横笔细、探针带高，实测亮段≥0.14、灭段≤0.05，取 0.10
+        val T = 0.10f
+        return closestDigit(
+            a > T, b > T, c > T, d > T, e > T, f > T, g > T
+        )
     }
 
     private fun closestDigit(a: Boolean, b: Boolean, c: Boolean,

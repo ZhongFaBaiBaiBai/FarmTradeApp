@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
+import android.util.Log
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
@@ -23,7 +24,9 @@ import com.farmtrade.app.util.SpeechInputController
 import com.farmtrade.app.util.VoiceParser
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -190,9 +193,19 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         binding.ivBack.setOnClickListener { finish() }
 
         // 卡片行点击 -> 专属编辑方式（方向/计量/类型 用抽取的辅助类，数值字段继续用通用文本框）
-        binding.rowDirection.setOnClickListener { QuickRecordEditDialogs.openDirectionDialog(this) }
-        binding.rowType.setOnClickListener { QuickRecordEditDialogs.openTypeDialog(this) }
-        binding.rowMeasureMode.setOnClickListener { QuickRecordEditDialogs.openMeasureDialog(this) }
+        // 注意：拍照/语音生成记录前 _pendingRecord 尚未初始化，先拦截防止崩溃
+        binding.rowDirection.setOnClickListener {
+            if (!this::_pendingRecord.isInitialized) { showToast("记录尚未生成，请稍候"); return@setOnClickListener }
+            QuickRecordEditDialogs.openDirectionDialog(this)
+        }
+        binding.rowType.setOnClickListener {
+            if (!this::_pendingRecord.isInitialized) { showToast("记录尚未生成，请稍候"); return@setOnClickListener }
+            QuickRecordEditDialogs.openTypeDialog(this)
+        }
+        binding.rowMeasureMode.setOnClickListener {
+            if (!this::_pendingRecord.isInitialized) { showToast("记录尚未生成，请稍候"); return@setOnClickListener }
+            QuickRecordEditDialogs.openMeasureDialog(this)
+        }
         binding.rowDateTime.setOnClickListener { openInlineEdit(EditField.DATETIME) }
         binding.rowGrossWeight.setOnClickListener { openInlineEdit(EditField.GROSS) }
         binding.rowTareWeight.setOnClickListener { openInlineEdit(EditField.TARE) }
@@ -566,33 +579,53 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
 
     private fun runOcr(uri: Uri) {
         lifecycleScope.launch {
-            val bitmap = OcrHelper.loadBitmap(this@QuickRecordActivity, uri)
-            if (mode == EXTRA_MODE_LEDGER) {
-                handleLedgerOcr(bitmap)
-                return@launch
-            }
-            // 1) 优先尝试过磅单多字段识别（毛重/皮重/单价/类型/时间）
-            val slip = if (bitmap != null) OcrHelper.recognizeWeighingSlip(bitmap) else null
-            if (slip != null) {
-                if (cameraForInitial) {
-                    cameraForInitial = false
-                    assembleRecordFromSlip(slip)
-                } else {
-                    applySlipToField(slip)
+            var bitmap: android.graphics.Bitmap? = null
+            try {
+                // 图片解码与 OCR 像素处理都在后台线程，避免主线程卡顿/ANR
+                bitmap = withContext(Dispatchers.IO) {
+                    OcrHelper.loadBitmap(this@QuickRecordActivity, uri)
                 }
-                return@launch
-            }
-            // 2) fallback：单数字识别（地磅屏等场景）
-            val number = if (bitmap != null) OcrHelper.recognizeFromBitmap(bitmap) else null
-            if (number != null) {
-                val value = number.toDoubleOrNull()
-                if (value != null && value > 0) {
-                    handleOcrResult(value)
+                if (mode == EXTRA_MODE_LEDGER) {
+                    val rows = if (bitmap != null) {
+                        withContext(Dispatchers.Default) { OcrHelper.recognizeLedgerRows(bitmap) }
+                    } else emptyList()
+                    handleLedgerRows(rows)
+                    return@launch
+                }
+                // 1) 优先尝试过磅单多字段识别（毛重/皮重/单价/类型/时间）
+                val slip = if (bitmap != null) {
+                    withContext(Dispatchers.Default) { OcrHelper.recognizeWeighingSlip(bitmap) }
+                } else null
+                if (slip != null) {
+                    if (cameraForInitial) {
+                        cameraForInitial = false
+                        assembleRecordFromSlip(slip)
+                    } else {
+                        applySlipToField(slip)
+                    }
+                    return@launch
+                }
+                // 2) fallback：单数字识别（地磅屏等场景）
+                val number = if (bitmap != null) {
+                    withContext(Dispatchers.Default) { OcrHelper.recognizeFromBitmap(bitmap) }
+                } else null
+                if (number != null) {
+                    val value = number.toDoubleOrNull()
+                    if (value != null && value > 0) {
+                        handleOcrResult(value)
+                    } else {
+                        showOcrFailureDialog()
+                    }
                 } else {
                     showOcrFailureDialog()
                 }
-            } else {
-                showOcrFailureDialog()
+            } catch (e: Throwable) {
+                // OOM 等异常不再闪退，给出重试入口
+                Log.e("QuickRecord", "拍照识别失败", e)
+                if (mode == EXTRA_MODE_LEDGER) handleLedgerRows(emptyList()) else showOcrFailureDialog()
+            } finally {
+                // 识别函数内部只回收各自的降采样副本，原图由调用方统一回收
+                bitmap?.recycle()
             }
         }
     }
@@ -611,8 +644,8 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
             .setNegativeButton("手动录入") { _, _ ->
-                startActivity(Intent(this, AddRecordActivity::class.java))
-                finish()
+                // 用 launcher 启动：保存成功后把 RESULT_OK 回传给记录列表刷新
+                editRecordLauncher.launch(Intent(this, AddRecordActivity::class.java))
             }
             .setNeutralButton("返回") { _, _ -> finish() }
             .setCancelable(false)
@@ -652,9 +685,8 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         showToast("识别到过磅单字段")
     }
 
-    /** 记录本批量：OCR 全部算式 -> 跳转 LedgerReviewActivity（结果回传后结束本页） */
-    private suspend fun handleLedgerOcr(bitmap: android.graphics.Bitmap?) {
-        val rows = if (bitmap != null) OcrHelper.recognizeLedgerRows(bitmap) else emptyList()
+    /** 记录本批量：OCR 结果在主线程分发 —— 空结果给重拍对话框，有结果跳转批量确认页 */
+    private fun handleLedgerRows(rows: List<OcrHelper.LedgerRow>) {
         if (rows.isEmpty()) {
             MaterialAlertDialogBuilder(this)
                 .setTitle("未能识别算式")
@@ -707,6 +739,13 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private fun confirmSave() {
         if (!this::_pendingRecord.isInitialized) {
             showToast("记录尚未生成")
+            return
+        }
+        // 校验：按重量模式下车重不能大于总重（否则净重为负）
+        if (_pendingRecord.measureMode != Record.MODE_QUANTITY &&
+            _pendingRecord.vehicleWeight > _pendingRecord.grossWeight
+        ) {
+            showToast("车重不能大于总重，请修改")
             return
         }
         _pendingRecord.netWeight = _pendingRecord.calculateNetWeight()

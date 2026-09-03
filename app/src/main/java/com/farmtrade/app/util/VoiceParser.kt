@@ -41,6 +41,17 @@ object VoiceParser {
             .replace(" ", "")
             .replace("　", "")
 
+        // 归一化"阿拉伯元+中文角分"的价格表达，防止"单价1块2毛5"被"单价(\d+)"截断成整数：
+        // "1块零5"→1.05、"1块2毛5"→1.25、"1块25"→1.25、"1块2"→1.2（顺序不可调换）
+        normalizedText = Regex("""(\d+)块零(\d)""")
+            .replace(normalizedText) { "${it.groupValues[1]}.0${it.groupValues[2]}" }
+        normalizedText = Regex("""(\d+)块(\d)毛(\d)""")
+            .replace(normalizedText) { "${it.groupValues[1]}.${it.groupValues[2]}${it.groupValues[3]}" }
+        normalizedText = Regex("""(\d+)块(\d)(\d)(?!\d)""")
+            .replace(normalizedText) { "${it.groupValues[1]}.${it.groupValues[2]}${it.groupValues[3]}" }
+        normalizedText = Regex("""(\d+)块(\d)(?!\d)""")
+            .replace(normalizedText) { "${it.groupValues[1]}.${it.groupValues[2]}" }
+
         // 先把中文数字转换成阿拉伯数字
         normalizedText = convertChineseNumbers(normalizedText)
         result.convertedText = normalizedText
@@ -260,6 +271,14 @@ object VoiceParser {
 
         while (i < len) {
             val c = text[i]
+            // 相邻独立数字拼接防护：上一段转换结果以数字结尾时，
+            // 紧跟的"一+单位量词"（如"零点八一斤"、"一百二十块五一斤"）保留汉字不转换，
+            // 避免拼成 0.81 / 120.51
+            if (result.isNotEmpty() && result.last().isDigit() && isMeasureWordOne(text, i)) {
+                result.append('一')
+                i++
+                continue
+            }
             // 检查当前字符是否是中文数字或单位的开始
             if (isChineseNumberStart(c, text, i)) {
                 // 找到中文数字的起止位置
@@ -301,6 +320,14 @@ object VoiceParser {
     }
 
     /**
+     * text[i] 是否是"一"且后一位是计量单位词（如"一斤/一公斤/一袋"）。
+     * 此时"一"是量词而非数字：如"零点八一斤"="0.8一斤"、"五毛一斤"的分位不吃"一"。
+     */
+    private fun isMeasureWordOne(text: String, i: Int): Boolean {
+        return text[i] == '一' && i + 1 < text.length && text[i + 1] in "斤公袋桶包箱瓶升"
+    }
+
+    /**
      * 找到中文数字的范围 [start, end)
      */
     private fun findChineseNumberRange(text: String, start: Int): Pair<Int, Int>? {
@@ -321,33 +348,46 @@ object VoiceParser {
                 // 小数点，后面继续找数字
                 i++
                 // 小数部分必须都是数字
+                val decStart = i
                 while (i < len && chineseDigitMap.containsKey(text[i])) {
                     i++
+                }
+                // "零点八一斤"：两位小数且末位是"一"、紧跟单位词时，
+                // 末位"一"通常是"一斤/一公斤"的"一"，回退不吃
+                if (i - decStart == 2 && text[i - 1] == '一' && i < len && text[i] in "斤公袋桶包箱瓶升") {
+                    i--
                 }
                 break
             } else if (c == '块' && hasDigit) {
                 // "一块四" / "一块二毛八" 这种价格表达，"块"作为特殊单位
                 // 检查后面是否有数字（角）
                 if (i + 1 < len && chineseDigitMap.containsKey(text[i + 1])) {
-                    // "一块四" → 整个作为一个数字处理
+                    val jiaoDigit = text[i + 1]
                     i += 2
-                    // 检查是否还有更多
-                    while (i < len && chineseDigitMap.containsKey(text[i])) {
+                    if (jiaoDigit == '零') {
+                        // "一块零五"：零占角位，后续数字是分位（不吃紧跟单位的"一"）
+                        while (i < len && chineseDigitMap.containsKey(text[i]) &&
+                            !isMeasureWordOne(text, i)
+                        ) {
+                            i++
+                        }
+                    } else if (i < len && (text[i] == '毛' || text[i] == '角')) {
+                        // 角位后跟"毛/角+数字"作分位（一块二毛八 → 1.28），
+                        // 或孤立的"毛/角"（一块五毛 → 1.5）；分位"一"若紧跟单位词是量词，不吃
                         i++
+                        if (i < len && chineseDigitMap.containsKey(text[i]) && !isMeasureWordOne(text, i)) {
+                            i++
+                            if (i < len && text[i] == '分') i++
+                        }
                     }
-                    // "一块二毛八"：角位数字后若紧跟"毛/角+数字"，继续吃分位（含"分"字）
-                    if (i < len && (text[i] == '毛' || text[i] == '角') &&
-                        i + 1 < len && chineseDigitMap.containsKey(text[i + 1])
-                    ) {
-                        i += 2
-                        if (i < len && text[i] == '分') i++
-                    }
+                    // 其余情况不再贪吃后续数字，防止"一百二十块五一斤"把"一斤"的"一"吃进角位
                 }
                 break
             } else if ((c == '毛' || c == '角') && hasDigit) {
                 // "三毛五" / "五毛" / "八角" 价格表达：把"毛/角"一并纳入数字串
                 i++
-                if (i < len && chineseDigitMap.containsKey(text[i])) {
+                // 分位"一"若紧跟单位词（"三毛五一斤"）是量词，不吃
+                if (i < len && chineseDigitMap.containsKey(text[i]) && !isMeasureWordOne(text, i)) {
                     i++
                     if (i < len && text[i] == '分') i++
                 }

@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,7 +23,9 @@ import com.farmtrade.app.util.SpeechInputController
 import com.farmtrade.app.util.VoiceParser
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -337,21 +340,34 @@ class AddRecordActivity : AppCompatActivity() {
 
     private fun runOcr(uri: Uri) {
         lifecycleScope.launch {
-            val bitmap = OcrHelper.loadBitmap(this@AddRecordActivity, uri) ?: run {
-                toast("OCR 加载图片失败")
-                return@launch
-            }
+            var bitmap: android.graphics.Bitmap? = null
+            try {
+                bitmap = withContext(Dispatchers.IO) {
+                    OcrHelper.loadBitmap(this@AddRecordActivity, uri)
+                } ?: run {
+                    toast("OCR 加载图片失败")
+                    return@launch
+                }
 
-            // 单字段模式：一次识别一个数（拍总重 / 拍车重各拍一张）
-            val number = OcrHelper.recognizeFromBitmap(bitmap)
-            if (number != null && number.toDoubleOrNull()?.let { it > 0.0 } == true) {
-                if (currentPhotoTarget == 0) binding.etGrossWeight.setText(number)
-                else binding.etTareWeight.setText(number)
-                toast("识别到：$number")
-            } else {
-                toast("未识别到有效数字")
+                // 单字段模式：一次识别一个数（拍总重 / 拍车重各拍一张）；像素处理放后台线程
+                val number = withContext(Dispatchers.Default) {
+                    OcrHelper.recognizeFromBitmap(bitmap)
+                }
+                if (number != null && number.toDoubleOrNull()?.let { it > 0.0 } == true) {
+                    if (currentPhotoTarget == 0) binding.etGrossWeight.setText(number)
+                    else binding.etTareWeight.setText(number)
+                    toast("识别到：$number")
+                } else {
+                    toast("未识别到有效数字")
+                }
+                recalcNetAndTotal()
+            } catch (e: Throwable) {
+                // OOM 等异常不闪退
+                Log.e("AddRecord", "拍照识别失败", e)
+                toast("识别失败，请重拍或手动输入")
+            } finally {
+                bitmap?.recycle()
             }
-            recalcNetAndTotal()
         }
     }
 
@@ -465,6 +481,10 @@ class AddRecordActivity : AppCompatActivity() {
         } else {
             if (gross <= 0) {
                 toast("请输入总重")
+                return
+            }
+            if (tare > gross) {
+                toast("车重不能大于总重，请修改")
                 return
             }
         }
