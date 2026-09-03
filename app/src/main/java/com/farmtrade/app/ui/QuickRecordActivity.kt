@@ -571,6 +571,18 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 handleLedgerOcr(bitmap)
                 return@launch
             }
+            // 1) 优先尝试过磅单多字段识别（毛重/皮重/单价/类型/时间）
+            val slip = if (bitmap != null) OcrHelper.recognizeWeighingSlip(bitmap) else null
+            if (slip != null) {
+                if (cameraForInitial) {
+                    cameraForInitial = false
+                    assembleRecordFromSlip(slip)
+                } else {
+                    applySlipToField(slip)
+                }
+                return@launch
+            }
+            // 2) fallback：单数字识别（地磅屏等场景）
             val number = if (bitmap != null) OcrHelper.recognizeFromBitmap(bitmap) else null
             if (number != null) {
                 val value = number.toDoubleOrNull()
@@ -585,6 +597,39 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 if (cameraForInitial && !this@QuickRecordActivity::_pendingRecord.isInitialized) finish()
             }
         }
+    }
+
+    /** 初始拍照识别到过磅单：沿用逻辑生成基础记录后，用票据字段覆盖 */
+    private fun assembleRecordFromSlip(slip: OcrHelper.WeighingSlip) {
+        assembleRecord(grossFromInput = 0.0, voiceResult = null)
+
+        if (slip.grossKg > 0) _pendingRecord.grossWeight = slip.grossKg
+        if (slip.tareKg > 0) _pendingRecord.vehicleWeight = slip.tareKg
+        _pendingRecord.measureMode = Record.MODE_WEIGHT_KG
+        _pendingRecord.unitName = "公斤"
+        if (!slip.type.isNullOrBlank()) _pendingRecord.type = slip.type
+        slip.unitPrice?.let { if (it > 0) _pendingRecord.unitPrice = it }
+        if (!slip.dateTime.isNullOrBlank()) _pendingRecord.dateTime = slip.dateTime
+
+        originalGrossWeight = _pendingRecord.grossWeight
+        _pendingRecord.netWeight = _pendingRecord.calculateNetWeight()
+        _pendingRecord.totalAmount = _pendingRecord.calculateTotalAmount()
+
+        renderRecord()
+        showCarryOverBanner()
+        showToast("已识别过磅单：${_pendingRecord.type} 净重${Record.formatNumber(_pendingRecord.netWeight)}公斤")
+    }
+
+    /** 行内重拍识别到过磅单：按目标字段回填对应值 */
+    private fun applySlipToField(slip: OcrHelper.WeighingSlip) {
+        when (cameraTarget) {
+            EditField.GROSS -> if (slip.grossKg > 0) _pendingRecord.grossWeight = slip.grossKg
+            EditField.TARE -> if (slip.tareKg > 0) _pendingRecord.vehicleWeight = slip.tareKg
+            EditField.PRICE -> slip.unitPrice?.let { if (it > 0) _pendingRecord.unitPrice = it }
+            else -> {}
+        }
+        doRecalcAndRender()
+        showToast("识别到过磅单字段")
     }
 
     /** 记录本批量：OCR 全部算式 -> 跳转 LedgerReviewActivity（结果回传后结束本页） */

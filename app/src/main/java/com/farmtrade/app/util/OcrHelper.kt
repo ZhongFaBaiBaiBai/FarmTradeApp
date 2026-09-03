@@ -68,6 +68,142 @@ object OcrHelper {
         return rows
     }
 
+    // ================== 过磅单多字段识别 ==================
+
+    /**
+     * 过磅单识别结果（重量统一换算为公斤）。
+     * @param type 粮食品类（如"小麦"），识别不到为 null
+     * @param grossKg 毛重（公斤）
+     * @param tareKg 皮重/车重（公斤）
+     * @param netKg 净重（公斤，识别值；可能为 0 表示未识别到）
+     * @param unitPrice 单价（元/斤）
+     * @param dateTime 过磅时间（yyyy-MM-dd HH:mm），识别不到为 null
+     */
+    data class WeighingSlip(
+        val type: String?,
+        val grossKg: Double,
+        val tareKg: Double,
+        val netKg: Double,
+        val unitPrice: Double?,
+        val dateTime: String?
+    )
+
+    /** 粮食品类关键词（用于从"粮食：小麦"行提取类型） */
+    private val grainTypeRegex = Regex(
+        """小麦|玉米|水稻|大米|大豆|黄豆|花生|棉粕|豆粕|麸皮|饲料|高粱|谷子|绿豆|豌豆|杂粮|化肥|农药|柴油|尿素|复合肥"""
+    )
+    /** 过磅单日期时间（兼容 2026-09-03 11:01:55 / 2026年9月3日 11:01） */
+    private val slipDateTimeRegex = Regex(
+        """(\d{4})[-年/.](\d{1,2})[-月/.](\d{1,2})日?\s*(\d{1,2}):(\d{2})"""
+    )
+    /** 通用数字 */
+    private val plainNumberRegex = Regex("""\d+(?:\.\d+)?""")
+
+    /**
+     * 过磅单识别：逐行按关键词提取 毛重/皮重/净重/单价/类型/时间。
+     * 判定成功条件：毛重>0 且（皮重>0 或 净重>0）。普通文字/地磅屏/记录本图片不会误判。
+     */
+    suspend fun recognizeWeighingSlip(bitmap: Bitmap): WeighingSlip? {
+        val text = runMlKit(bitmap) ?: return null
+        return extractWeighingSlip(text)
+    }
+
+    private fun extractWeighingSlip(visionText: Text): WeighingSlip? {
+        var gross = 0.0
+        var tare = 0.0
+        var net = 0.0
+        var price: Double? = null
+        var type: String? = null
+        var dateTime: String? = null
+
+        for (block in visionText.textBlocks) {
+            for (line in block.lines) {
+                // 规整：去空格/逗号，统一负号
+                val norm = line.text.replace(" ", "").replace(",", "").replace("，", "")
+                if (norm.isBlank()) continue
+
+                // 1) 过磅时间
+                if (dateTime == null) {
+                    val dm = slipDateTimeRegex.find(norm)
+                    if (dm != null) {
+                        dateTime = "%04d-%02d-%02d %02d:%02d".format(
+                            dm.groupValues[1].toInt(),
+                            dm.groupValues[2].toInt(),
+                            dm.groupValues[3].toInt(),
+                            dm.groupValues[4].toInt(),
+                            dm.groupValues[5].toInt()
+                        )
+                    }
+                }
+
+                // 2) 粮食类型（"粮食：小麦"）
+                if (type == null && norm.contains("粮食")) {
+                    type = extractGrainType(norm)
+                }
+
+                // 3) 重量字段（从各自关键词后面取第一个数字，支持一行多字段合并）
+                if (norm.contains("毛重") && gross <= 0.0) {
+                    numAfter(norm, "毛重")?.let { gross = toKg(norm, it) }
+                }
+                if (tare <= 0.0 && (norm.contains("皮重") || norm.contains("车重"))) {
+                    numAfter(norm, "皮重")?.let { tare = toKg(norm, it) }
+                        ?: numAfter(norm, "车重")?.let { tare = toKg(norm, it) }
+                }
+                if (norm.contains("净重") && net <= 0.0) {
+                    numAfter(norm, "净重")?.let { net = toKg(norm, it) }
+                }
+
+                // 4) 单价（元/斤，不换算）
+                if (price == null && norm.contains("单价")) {
+                    price = numAfter(norm, "单价")
+                }
+            }
+        }
+
+        // 没有毛重就不是过磅单
+        if (gross <= 0.0) return null
+        // 皮重缺失时用净重兜底推算
+        if (tare <= 0.0 && net > 0.0) tare = gross - net
+        if (tare <= 0.0 || gross <= tare) return null
+        // 合理性：毛重 < 100 吨
+        if (gross > 100000) return null
+
+        return WeighingSlip(type, gross, tare, net, price?.takeIf { it > 0 }, dateTime)
+    }
+
+    /** 取 label 之后的第一个数字（支持"毛重2154皮重814"合并行） */
+    private fun numAfter(norm: String, label: String): Double? {
+        val idx = norm.indexOf(label)
+        if (idx < 0) return null
+        return plainNumberRegex.find(norm, idx + label.length)?.value?.toDoubleOrNull()
+    }
+
+    /** 按行内单位换算为公斤：公斤/kg 原值；纯"斤"÷2；无单位默认公斤 */
+    private fun toKg(norm: String, value: Double): Double {
+        val lower = norm.lowercase()
+        return when {
+            lower.contains("公斤") || lower.contains("kg") -> value
+            lower.contains("斤") -> value / 2.0
+            else -> value
+        }
+    }
+
+    /** 从"粮食：小麦"行提取品类；无冒号视为标题行（如"XX粮食收购点"）不提取 */
+    private fun extractGrainType(norm: String): String? {
+        grainTypeRegex.find(norm)?.value?.let { return it }
+        val labelIdx = norm.indexOf("粮食")
+        val colonIdx = norm.indexOfFirst { it == '：' || it == ':' }
+        if (labelIdx >= 0 && colonIdx > labelIdx) {
+            var rest = norm.substring(colonIdx + 1)
+            // 截到第一个单位/干扰词之前
+            val stopIdx = rest.indexOfFirst { it == '斤' || it == '公' || it == 'k' || it == 'K' }
+            if (stopIdx > 0) rest = rest.substring(0, stopIdx)
+            val cleaned = rest.filter { it.code > 0x2E00 }  // 只保留 CJK 等全角字符
+            if (cleaned.isNotBlank() && cleaned.length <= 8) return cleaned
+        }
+        return null
+    }
+
     fun createImageUri(context: Context): Uri? {
         return try {
             val file = File.createTempFile("weigh_${System.currentTimeMillis()}", ".jpg", context.cacheDir)
