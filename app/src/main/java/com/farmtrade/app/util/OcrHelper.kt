@@ -52,12 +52,18 @@ object OcrHelper {
         val n3 = recognizeSevenSegmentDigits(preprocessed)
         if (n3 != null) return n3
 
-        // —— 策略 4：纸张裁剪 + 3x 放大 + ±12° 旋转（手写记录本小字场景）
+        // —— 策略 4：纸张裁剪 + 3x 放大 + 灰度增强 + 二值化 + ±12° 旋转
         val paperScaled = cropAndScalePaper(bitmap)
         val n5 = runMlKit(paperScaled).let { pickLargestNumber(it) }
         if (n5 != null) return n5
+        val enhanced = enhanceGrayscaleContrast(paperScaled)
+        val n5b = runMlKit(enhanced).let { pickLargestNumber(it) }
+        if (n5b != null) return n5b
+        val binary = binarizeOtsu(enhanced)
+        val n5c = runMlKit(binary).let { pickLargestNumber(it) }
+        if (n5c != null) return n5c
         for (angle in listOf(-12f, 12f)) {
-            val rotated = rotateBitmap(paperScaled, angle)
+            val rotated = rotateBitmap(binary, angle)
             val n6 = runMlKit(rotated).let { pickLargestNumber(it) }
             if (n6 != null) return n6
         }
@@ -73,22 +79,30 @@ object OcrHelper {
         // Pass 1: 原图直接识别
         runMlKit(bitmap).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
 
-        // Pass 2: 纸张裁剪 + 3x 放大（手写小字/背景干扰大时）
+        // Pass 2: 纸张裁剪 + 3x 放大
         val scaled = cropAndScalePaper(bitmap)
         runMlKit(scaled).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
 
-        // Pass 3: 裁剪 + 放大后 ±12° 旋转重试（手写行倾斜）
+        // Pass 3: 灰度对比度增强
+        val enhanced = enhanceGrayscaleContrast(scaled)
+        runMlKit(enhanced).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+
+        // Pass 4: Otsu 二值化
+        val binary = binarizeOtsu(enhanced)
+        runMlKit(binary).let { extractLedgerRows(it) }.let { if (it.isNotEmpty()) return it }
+
+        // Pass 5: 二值化图 ±12° 旋转重试
         for (angle in listOf(-12f, 12f)) {
-            val rotated = rotateBitmap(scaled, angle)
+            val rotated = rotateBitmap(binary, angle)
             val rows = runMlKit(rotated).let { extractLedgerRows(it) }
             if (rows.isNotEmpty()) return rows
         }
 
-        // Pass 4: 原图 2x 放大兜底
+        // Pass 6: 原图 2x 放大兜底
         val scaled2 = Bitmap.createScaledBitmap(bitmap, bitmap.width * 2, bitmap.height * 2, true)
-        val rows4 = runMlKit(scaled2).let { extractLedgerRows(it) }
+        val rows6 = runMlKit(scaled2).let { extractLedgerRows(it) }
         scaled2.recycle()
-        return rows4
+        return rows6
     }
 
     // ================== 过磅单多字段识别 ==================
@@ -127,8 +141,28 @@ object OcrHelper {
      * 判定成功条件：毛重>0 且（皮重>0 或 净重>0）。普通文字/地磅屏/记录本图片不会误判。
      */
     suspend fun recognizeWeighingSlip(bitmap: Bitmap): WeighingSlip? {
-        val text = runMlKit(bitmap) ?: return null
-        return extractWeighingSlip(text)
+        // Pass 1: 原图直接识别
+        runMlKit(bitmap)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+
+        // Pass 2: 纸张裁剪 + 3x 放大
+        val paperScaled = cropAndScalePaper(bitmap)
+        runMlKit(paperScaled)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+
+        // Pass 3: 灰度对比度增强
+        val enhanced = enhanceGrayscaleContrast(paperScaled)
+        runMlKit(enhanced)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+
+        // Pass 4: Otsu 二值化
+        val binary = binarizeOtsu(enhanced)
+        runMlKit(binary)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+
+        // Pass 5: ±12° 旋转重试（在二值化图上）
+        for (angle in listOf(-12f, 12f)) {
+            val rotated = rotateBitmap(binary, angle)
+            runMlKit(rotated)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
+        }
+
+        return null
     }
 
     private fun extractWeighingSlip(visionText: Text): WeighingSlip? {
@@ -325,6 +359,84 @@ object OcrHelper {
         return true
     }
 
+    // ================== 内部：灰度对比度增强 / 二值化 ==================
+
+    /**
+     * 灰度化 + 对比度拉伸：把暗/亮的灰度值线性拉伸到 0~255 全范围。
+     * 对光线不均、阴影、偏暗的照片效果显著，ML Kit 在高对比图上识别率更高。
+     */
+    private fun enhanceGrayscaleContrast(src: Bitmap): Bitmap {
+        val w = src.width; val h = src.height
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        // 1) 转灰度 + 找 min/max
+        val gray = IntArray(w * h)
+        var minG = 255; var maxG = 0
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val g = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+            gray[i] = g
+            if (g < minG) minG = g
+            if (g > maxG) maxG = g
+        }
+        // 2) 线性拉伸
+        val range = (maxG - minG).coerceAtLeast(1)
+        val out = IntArray(w * h)
+        for (i in gray.indices) {
+            val stretched = ((gray[i] - minG) * 255 / range).coerceIn(0, 255)
+            out[i] = Color.rgb(stretched, stretched, stretched)
+        }
+        val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        result.setPixels(out, 0, w, 0, 0, w, h)
+        return result
+    }
+
+    /**
+     * Otsu 自适应二值化：自动计算最佳阈值，比固定阈值更适合光线不均的照片。
+     * 输出白底黑字，适合 ML Kit。
+     */
+    private fun binarizeOtsu(src: Bitmap): Bitmap {
+        val w = src.width; val h = src.height
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        // 灰度直方图
+        val hist = IntArray(256)
+        for (p in pixels) {
+            val g = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+            hist[g]++
+        }
+        // Otsu 找最佳阈值
+        val total = w * h
+        var sumAll = 0
+        for (i in 0..255) sumAll += i * hist[i]
+        var sumBg = 0; var countBg = 0
+        var maxVar = 0.0; var bestTh = 128
+        for (th in 0..255) {
+            countBg += hist[th]
+            if (countBg == 0) continue
+            val countFg = total - countBg
+            if (countFg == 0) break
+            sumBg += th * hist[th]
+            val meanBg = sumBg.toDouble() / countBg
+            val meanFg = (sumAll - sumBg).toDouble() / countFg
+            val variance = countBg.toDouble() * countFg * (meanBg - meanFg) * (meanBg - meanFg)
+            if (variance > maxVar) { maxVar = variance; bestTh = th }
+        }
+
+        // 二值化
+        val black = Color.BLACK; val white = Color.WHITE
+        val out = IntArray(w * h)
+        for (i in pixels.indices) {
+            val g = (Color.red(pixels[i]) * 299 + Color.green(pixels[i]) * 587 + Color.blue(pixels[i]) * 114) / 1000
+            out[i] = if (g < bestTh) black else white
+        }
+        val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        result.setPixels(out, 0, w, 0, 0, w, h)
+        return result
+    }
+
     // ================== 内部：纸张区域检测 / 旋转 ==================
 
     /**
@@ -345,8 +457,8 @@ object OcrHelper {
                 val p = pixels[y * w + x]
                 val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
                 val maxc = maxOf(r, g, b); val minc = minOf(r, g, b)
-                // 浅色纸张（白/浅蓝/浅黄）：亮度高、饱和度低
-                val isPaper = minc > 140 && (maxc - minc) < 70
+                // 浅色纸张（白/浅蓝/浅黄/暗光纸）：亮度较高、饱和度低
+                val isPaper = minc > 110 && (maxc - minc) < 80
                 if (isPaper) {
                     count++
                     if (x < minX) minX = x
