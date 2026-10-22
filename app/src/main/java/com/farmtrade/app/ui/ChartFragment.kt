@@ -31,16 +31,12 @@ class ChartFragment : Fragment() {
 
     private enum class PeriodMode { DAY, MONTH, QUARTER, YEAR }
 
-    /** 统计范围：全部 / 仅拍照识别 / 仅手动录入 */
-    private enum class SourceFilter { ALL, PHOTO, MANUAL }
-
     private var _binding: FragmentChartBinding? = null
     private val binding get() = _binding!!
 
     private lateinit var dbHelper: DatabaseHelper
 
     private var periodMode = PeriodMode.MONTH
-    private var sourceFilter = SourceFilter.ALL
     private val selCal: Calendar = Calendar.getInstance()
 
     override fun onCreateView(
@@ -57,9 +53,7 @@ class ChartFragment : Fragment() {
         dbHelper = DatabaseHelper(requireContext())
         setupToggle()
         setupPeriodSelector()
-        setupSourceFilter()
         binding.togglePeriod.check(binding.btnPeriodMonth.id)
-        binding.chipGroupSource.check(binding.chipSourceAll.id)
         refresh()
     }
 
@@ -89,17 +83,6 @@ class ChartFragment : Fragment() {
         binding.btnNext.setOnClickListener { shiftPeriod(1) }
     }
 
-    private fun setupSourceFilter() {
-        binding.chipGroupSource.setOnCheckedStateChangeListener { _, checkedIds ->
-            sourceFilter = when (checkedIds.firstOrNull()) {
-                R.id.chipSourcePhoto -> SourceFilter.PHOTO
-                R.id.chipSourceManual -> SourceFilter.MANUAL
-                else -> SourceFilter.ALL
-            }
-            refresh()
-        }
-    }
-
     private fun shiftPeriod(direction: Int) {
         when (periodMode) {
             PeriodMode.DAY -> selCal.add(Calendar.DAY_OF_YEAR, direction)
@@ -120,7 +103,7 @@ class ChartFragment : Fragment() {
 
     private fun refresh() {
         updateLabel()
-        val records = filterBySource(loadRangeRecords()).sortedBy { it.dateTime }
+        val records = loadRangeRecords().sortedBy { it.dateTime }
         updateOverview(records)
         updateTypeTable(records)
         updatePeriodTable(records)
@@ -136,13 +119,6 @@ class ChartFragment : Fragment() {
             PeriodMode.QUARTER -> String.format("%d年Q%d", y, quarterOf(m))
             PeriodMode.YEAR -> String.format("%d年", y)
         }
-    }
-
-    /** 按「统计范围」筛选：拍照识别 = source 为 PHOTO，手动录入 = 其它（手动 / 旧版语音） */
-    private fun filterBySource(records: List<Record>): List<Record> = when (sourceFilter) {
-        SourceFilter.ALL -> records
-        SourceFilter.PHOTO -> records.filter { it.source == Record.SOURCE_PHOTO }
-        SourceFilter.MANUAL -> records.filter { it.source != Record.SOURCE_PHOTO }
     }
 
     private fun loadRangeRecords(): List<Record> {
@@ -168,16 +144,15 @@ class ChartFragment : Fragment() {
     private fun updateOverview(records: List<Record>) {
         binding.tvStatCount.text = records.size.toString()
         binding.tvStatAmount.text = "￥" + Record.formatMoney(records.sumOf { it.totalAmount })
-
-        // 净重统一换算成「斤」：公斤模式 ×2
-        val netJin = records
-            .filter { it.measureMode == Record.MODE_WEIGHT_KG || it.measureMode == Record.MODE_WEIGHT_JIN }
-            .sumOf { r ->
-                val net = r.grossWeight - r.vehicleWeight
-                if (r.measureMode == Record.MODE_WEIGHT_KG) net * 2 else net
-            }
-        binding.tvStatNetWeight.text = Record.formatNumber(netJin)
     }
+
+    /** 某批记录的净重合计，统一换算成「斤」 */
+    private fun netJinOf(records: List<Record>): Double = records
+        .filter { it.measureMode == Record.MODE_WEIGHT_KG || it.measureMode == Record.MODE_WEIGHT_JIN }
+        .sumOf { r ->
+            val net = r.grossWeight - r.vehicleWeight
+            if (r.measureMode == Record.MODE_WEIGHT_KG) net * 2 else net
+        }
 
     private fun updateTypeTable(records: List<Record>) {
         val container = binding.llTypeRows
@@ -189,11 +164,20 @@ class ChartFragment : Fragment() {
         binding.tvTypeEmpty.visibility = View.GONE
         val green = ContextCompat.getColor(requireContext(), R.color.green_primary)
         records.groupBy { it.type.ifBlank { "未分类" } }
-            .mapValues { (_, list) -> list.sumOf { it.totalAmount } to list.size }
+            .mapValues { (_, list) ->
+                Triple(list.sumOf { it.totalAmount }, list.size, netJinOf(list))
+            }
             .toList()
             .sortedByDescending { it.second.first }
-            .forEach { (type, pair) ->
-                addTableRow(container, type, "${pair.second} 笔", "￥" + Record.formatMoney(pair.first), green)
+            .forEach { (type, info) ->
+                addTableRow(
+                    container,
+                    type,
+                    "${info.second} 笔",
+                    Record.formatNumber(info.third),
+                    "￥" + Record.formatMoney(info.first),
+                    green
+                )
             }
     }
 
@@ -216,6 +200,7 @@ class ChartFragment : Fragment() {
                 container,
                 labelOfKey(key, byMonthGranularity),
                 "${list.size} 笔",
+                null,
                 "￥" + Record.formatMoney(list.sumOf { it.totalAmount })
             )
         }
@@ -233,15 +218,18 @@ class ChartFragment : Fragment() {
         }
     }
 
-    /** 表格行：名称 | 数量 | 金额，末尾附一条分隔线 */
+    /** 表格行：名称 | 笔数 | 净重 | 金额（净重传 null 时只渲染三列），末尾附一条分隔线 */
     private fun addTableRow(
         container: LinearLayout,
         name: String,
         count: String,
+        netWeight: String?,
         amount: String,
         amountColor: Int? = null
     ) {
         val ctx = requireContext()
+        val primary = ContextCompat.getColor(ctx, R.color.text_primary)
+        val secondary = ContextCompat.getColor(ctx, R.color.text_secondary)
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -250,14 +238,16 @@ class ChartFragment : Fragment() {
             )
             setPadding(0, dp(11f), 0, dp(11f))
         }
-        row.addView(cell(name, 1.3f, Gravity.START, color = ContextCompat.getColor(ctx, R.color.text_primary)))
-        row.addView(cell(count, 0.7f, Gravity.CENTER, color = ContextCompat.getColor(ctx, R.color.text_secondary), size = 13f))
-        row.addView(
-            cell(
-                amount, 1.2f, Gravity.END, bold = true, size = 15f,
-                color = amountColor ?: ContextCompat.getColor(ctx, R.color.text_primary)
-            )
-        )
+        if (netWeight != null) {
+            row.addView(cell(name, 1.0f, Gravity.START, color = primary))
+            row.addView(cell(count, 0.55f, Gravity.CENTER, color = secondary, size = 13f))
+            row.addView(cell(netWeight, 1.05f, Gravity.CENTER, color = secondary, size = 13f))
+            row.addView(cell(amount, 1.15f, Gravity.END, bold = true, size = 15f, color = amountColor ?: primary))
+        } else {
+            row.addView(cell(name, 1.3f, Gravity.START, color = primary))
+            row.addView(cell(count, 0.7f, Gravity.CENTER, color = secondary, size = 13f))
+            row.addView(cell(amount, 1.2f, Gravity.END, bold = true, size = 15f, color = amountColor ?: primary))
+        }
         container.addView(row)
 
         container.addView(View(ctx).apply {
