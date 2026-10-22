@@ -113,53 +113,50 @@
                 android:layout_marginStart="10dp" />
         </LinearLayout>
 
-        <!-- 行3：重量明细 -->
+        <!-- 行3：重量明细（总重/车重一行，净重单独一行） -->
         <LinearLayout
             android:id="@+id/layoutWeight"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:orientation="vertical"
             android:layout_marginTop="8dp">
 
-            <TextView
-                android:id="@+id/tvGrossWeight"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="总重:0"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=" · "
-                android:textColor="@color/text_hint"
-                android:textSize="13sp" />
+                <TextView
+                    android:id="@+id/tvGrossWeight"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="总重:0 公斤"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
 
-            <TextView
-                android:id="@+id/tvTareWeight"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="车重:0"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=" · "
-                android:textColor="@color/text_hint"
-                android:textSize="13sp" />
+                <TextView
+                    android:id="@+id/tvTareWeight"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="车重:0 公斤"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/tvNetWeight"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="净重:0"
+                android:layout_marginTop="4dp"
+                android:text="净重:0 斤"
                 android:textColor="@color/green_primary"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end" />
