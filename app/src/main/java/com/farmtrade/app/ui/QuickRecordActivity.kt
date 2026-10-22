@@ -151,9 +151,16 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         // 占位提示，待生成后由 renderRecord 覆盖
         binding.tvCarryOverInfo.text = "正在生成记录..."
 
-        when (mode) {
-            EXTRA_MODE_LEDGER -> startLedgerFlow()
-            else -> startPhotoFlow()
+        // 从相册选图进入：跳过相机，直接对这张图做 OCR
+        val incomingUri: Uri? = @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_IMAGE_URI)
+        if (incomingUri != null) {
+            cameraForInitial = true
+            runOcr(incomingUri)
+        } else {
+            when (mode) {
+                EXTRA_MODE_LEDGER -> startLedgerFlow()
+                else -> startPhotoFlow()
+            }
         }
     }
 
@@ -664,5 +671,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         const val EXTRA_MODE_PHOTO = "PHOTO"
         /** 拍整本记录本批量录入：拍照 -> OCR 所有"总重-车重"算式 -> LedgerReviewActivity */
         const val EXTRA_MODE_LEDGER = "LEDGER"
+        /** 直接传入一张图片（相册选择），跳过相机 */
+        const val EXTRA_IMAGE_URI = "extra_image_uri"
     }
 }

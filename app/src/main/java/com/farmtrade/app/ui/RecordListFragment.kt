@@ -8,6 +8,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -64,6 +65,26 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
     /** 排序模式 */
     private var sortMode: Int = SORT_TIME_DESC
+
+    /** 从相册选图时，是否走「记录本批量」流程 */
+    private var pickImageForLedger = false
+
+    /** 相册选图：把选中的图片直接交给 QuickRecordActivity 做 OCR */
+    private val pickImageLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val intent = Intent(requireContext(), QuickRecordActivity::class.java).apply {
+                putExtra(QuickRecordActivity.EXTRA_IMAGE_URI, uri)
+                putExtra(
+                    EXTRA_RECORD_MODE,
+                    if (pickImageForLedger) QuickRecordActivity.EXTRA_MODE_LEDGER else Record.SOURCE_PHOTO
+                )
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivityForResult(intent, REQ_QUICK_RECORD)
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -517,6 +538,16 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
                 Intent(requireContext(), AddRecordActivity::class.java),
                 REQ_ADD_RECORD
             )
+        }
+        sheetBinding.btnPickPhoto.setOnClickListener {
+            dialog.dismiss()
+            pickImageForLedger = false
+            pickImageLauncher.launch("image/*")
+        }
+        sheetBinding.btnPickLedger.setOnClickListener {
+            dialog.dismiss()
+            pickImageForLedger = true
+            pickImageLauncher.launch("image/*")
         }
         sheetBinding.btnCancel.setOnClickListener { dialog.dismiss() }
 
