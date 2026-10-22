@@ -269,6 +269,21 @@
                                 android:layout_marginTop="4dp" />
                         </LinearLayout>
 
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/divider"
+                            android:layout_marginTop="14dp" />
+
+                        <TextView
+                            android:id="@+id/tvDirectionSplit"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="买入 ¥0.00　·　卖出 ¥0.00"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp"
+                            android:gravity="center" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
