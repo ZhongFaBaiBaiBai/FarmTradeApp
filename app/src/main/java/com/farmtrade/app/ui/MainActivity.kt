@@ -18,7 +18,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var recordListFragment: RecordListFragment
     private lateinit var chartFragment: ChartFragment
-    private lateinit var summaryFragment: SummaryFragment
+    private lateinit var photoFragment: PhotoArchiveFragment
     private lateinit var settingsFragment: SettingsFragment
 
     private var currentFragment: Fragment? = null
@@ -32,14 +32,14 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             recordListFragment = RecordListFragment()
             chartFragment = ChartFragment()
-            summaryFragment = SummaryFragment()
+            photoFragment = PhotoArchiveFragment()
             settingsFragment = SettingsFragment()
 
             // 默认显示记录列表
             supportFragmentManager.beginTransaction()
                 .add(R.id.fragmentContainer, recordListFragment, "record")
                 .add(R.id.fragmentContainer, chartFragment, "chart").hide(chartFragment)
-                .add(R.id.fragmentContainer, summaryFragment, "summary").hide(summaryFragment)
+                .add(R.id.fragmentContainer, photoFragment, "photos").hide(photoFragment)
                 .add(R.id.fragmentContainer, settingsFragment, "settings").hide(settingsFragment)
                 .commit()
             currentFragment = recordListFragment
@@ -47,7 +47,7 @@ class MainActivity : AppCompatActivity() {
             // 恢复 Fragment 引用
             recordListFragment = supportFragmentManager.findFragmentByTag("record") as RecordListFragment
             chartFragment = supportFragmentManager.findFragmentByTag("chart") as ChartFragment
-            summaryFragment = supportFragmentManager.findFragmentByTag("summary") as SummaryFragment
+            photoFragment = supportFragmentManager.findFragmentByTag("photos") as PhotoArchiveFragment
             settingsFragment = supportFragmentManager.findFragmentByTag("settings") as SettingsFragment
             currentFragment = supportFragmentManager.findFragmentById(R.id.fragmentContainer)
         }
@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 R.id.nav_record -> switchFragment(recordListFragment)
                 R.id.nav_chart -> switchFragment(chartFragment)
-                R.id.nav_summary -> switchFragment(summaryFragment)
+                R.id.nav_photos -> switchFragment(photoFragment)
                 R.id.nav_settings -> switchFragment(settingsFragment)
             }
             true
@@ -71,7 +71,7 @@ class MainActivity : AppCompatActivity() {
         val startTab = intent.getStringExtra(EXTRA_START_TAB)
         binding.bottomNav.selectedItemId = when (startTab) {
             "chart" -> R.id.nav_chart
-            "summary" -> R.id.nav_summary
+            "photos" -> R.id.nav_photos
             "settings" -> R.id.nav_settings
             else -> R.id.nav_record
         }
