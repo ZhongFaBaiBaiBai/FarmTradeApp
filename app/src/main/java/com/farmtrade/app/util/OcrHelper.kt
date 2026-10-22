@@ -50,7 +50,9 @@ object OcrHelper {
         try {
             // —— 策略 1：先直接交给 ML Kit（正常文本/记录本场景快速成功）
             val r1 = runMlKit(src)
+            Log.d("OcrHelper", "数字 Pass1 文本: " + (r1?.text?.replace("\n", " | ")?.take(240) ?: "null"))
             val n1 = pickLargestNumber(r1)
+            Log.d("OcrHelper", "数字 Pass1 取值: " + (n1 ?: "null"))
             if (n1 != null) return n1
 
             // —— 策略 2：LED 预处理管线 → ML Kit
@@ -127,7 +129,10 @@ object OcrHelper {
         val candidates = LinkedHashMap<String, LedgerRow>()
         try {
             // Pass 1: 原图直接识别
-            runMlKit(src).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+            runMlKit(src).let { t ->
+                Log.d("OcrHelper", "Ledger Pass1 文本: " + (t?.text?.replace("\n", " | ")?.take(240) ?: "null"))
+                extractLedgerRows(t)
+            }.forEach { candidates[keyOf(it)] = it }
 
             // Pass 2: 纸张裁剪 + 放大
             val scaled = cropAndScalePaper(src)
@@ -137,7 +142,10 @@ object OcrHelper {
                 // Pass 3: 灰度对比度增强
                 val enhanced = enhanceGrayscaleContrast(scaled)
                 try {
-                    runMlKit(enhanced).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+                    runMlKit(enhanced).let { t ->
+                        Log.d("OcrHelper", "Ledger Pass3 文本: " + (t?.text?.replace("\n", " | ")?.take(240) ?: "null"))
+                        extractLedgerRows(t)
+                    }.forEach { candidates[keyOf(it)] = it }
 
                     // Pass 4: Otsu 二值化
                     val binary = binarizeOtsu(enhanced)
