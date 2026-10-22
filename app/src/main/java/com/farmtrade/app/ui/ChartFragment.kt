@@ -104,7 +104,13 @@ class ChartFragment : Fragment() {
         val all = dbHelper.getAllRecords()
         val keys: List<String> = when (periodMode) {
             PeriodMode.DAY -> all.map { it.dateTime.take(10) }.distinct().sortedDescending()
-            PeriodMode.MONTH, PeriodMode.QUARTER -> all.map { it.dateTime.take(7) }.distinct().sortedDescending()
+            PeriodMode.MONTH -> all.map { it.dateTime.take(7) }.distinct().sortedDescending()
+            // 季视图直接列出「年-Q季」，不再按月份列
+            PeriodMode.QUARTER -> all.map {
+                val y = it.dateTime.take(4)
+                val m = it.dateTime.drop(5).take(2).toIntOrNull() ?: 1
+                "$y-Q${(m - 1) / 3 + 1}"
+            }.distinct().sortedDescending()
             PeriodMode.YEAR -> all.map { it.dateTime.take(4) }.distinct().sortedDescending()
         }
         if (keys.isEmpty()) {
@@ -115,7 +121,8 @@ class ChartFragment : Fragment() {
         val labels = keys.map { formatPeriodOption(it) }.toTypedArray()
         val title = when (periodMode) {
             PeriodMode.DAY -> "选择日期（只列出有记录的）"
-            PeriodMode.MONTH, PeriodMode.QUARTER -> "选择月份（只列出有记录的）"
+            PeriodMode.MONTH -> "选择月份（只列出有记录的）"
+            PeriodMode.QUARTER -> "选择季度（只列出有记录的）"
             PeriodMode.YEAR -> "选择年份（只列出有记录的）"
         }
 
@@ -128,9 +135,14 @@ class ChartFragment : Fragment() {
                         val p = key.split("-")
                         selCal.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt())
                     }
-                    PeriodMode.MONTH, PeriodMode.QUARTER -> {
+                    PeriodMode.MONTH -> {
                         val p = key.split("-")
                         selCal.set(p[0].toInt(), p[1].toInt() - 1, 1)
+                    }
+                    PeriodMode.QUARTER -> {
+                        val p = key.split("-Q")
+                        val q = p.getOrNull(1)?.toIntOrNull() ?: 1
+                        selCal.set(p[0].toInt(), (q - 1) * 3, 1)
                     }
                     PeriodMode.YEAR -> selCal.set(key.toInt(), 0, 1)
                 }
@@ -141,25 +153,41 @@ class ChartFragment : Fragment() {
 
     private fun formatPeriodOption(key: String): String = when (periodMode) {
         PeriodMode.DAY -> key
-        PeriodMode.MONTH, PeriodMode.QUARTER -> {
+        PeriodMode.MONTH -> {
             val p = key.split("-")
             (p.getOrNull(0) ?: key) + "年" + (p.getOrNull(1)?.toIntOrNull() ?: "") + "月"
+        }
+        PeriodMode.QUARTER -> {
+            val p = key.split("-Q")
+            (p.getOrNull(0) ?: key) + "年Q" + (p.getOrNull(1) ?: "")
         }
         PeriodMode.YEAR -> key + "年"
     }
 
-    /** 按货物类型筛选：全部 + 数据库里的所有类型 */
     private fun setupTypeFilter() {
+        buildTypeChips()
+    }
+
+    /**
+     * 重建类型 chips。每次切回本页都重建，这样在记账页新增的自定义类型能立刻出现在这里。
+     * 重建前先摘掉监听，避免 clear 时触发回调导致死循环。
+     */
+    private fun buildTypeChips() {
         val group = binding.chipGroupTypeFilter
+        group.setOnCheckedStateChangeListener(null)
         group.removeAllViews()
+
         val types = mutableListOf("全部")
         types.addAll(dbHelper.getAllTypes().filter { it.isNotBlank() })
+        // 之前选中的类型如果被删了，回到「全部」
+        if (typeFilter != null && typeFilter !in types) typeFilter = null
 
-        types.forEachIndexed { index, name ->
+        types.forEach { name ->
+            val checked = if (typeFilter == null) name == "全部" else name == typeFilter
             val chip = Chip(requireContext()).apply {
                 text = name
                 isCheckable = true
-                isChecked = index == 0
+                isChecked = checked
                 textSize = 14f
             }
             group.addView(chip)
@@ -168,6 +196,15 @@ class ChartFragment : Fragment() {
             if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
             val chip = g.findViewById<Chip>(checkedIds[0]) ?: return@setOnCheckedStateChangeListener
             typeFilter = if (chip.text.toString() == "全部") null else chip.text.toString()
+            refresh()
+        }
+    }
+
+    /** 从别的页切回来时：类型列表可能新增了自定义类型，重建并刷新 */
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && _binding != null) {
+            buildTypeChips()
             refresh()
         }
     }
@@ -236,6 +273,11 @@ class ChartFragment : Fragment() {
     private fun updateOverview(records: List<Record>) {
         binding.tvStatCount.text = records.size.toString()
         binding.tvStatAmount.text = "￥" + Record.formatMoney(records.sumOf { it.totalAmount })
+
+        val buySum = records.filter { it.direction == "买入" }.sumOf { it.totalAmount }
+        val sellSum = records.filter { it.direction == "卖出" }.sumOf { it.totalAmount }
+        binding.tvDirectionSplit.text =
+            "买入 ￥" + Record.formatMoney(buySum) + "　·　卖出 ￥" + Record.formatMoney(sellSum)
     }
 
     /** 某批记录的净重合计，统一换算成「斤」 */
