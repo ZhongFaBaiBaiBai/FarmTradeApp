@@ -7,11 +7,11 @@
     <item
         android:id="@+id/nav_chart"
         android:icon="@drawable/ic_nav_chart"
-        android:title="图表" />
+        android:title="汇总" />
     <item
         android:id="@+id/nav_summary"
         android:icon="@drawable/ic_nav_summary"
-        android:title="汇总" />
+        android:title="收支" />
     <item
         android:id="@+id/nav_settings"
         android:icon="@drawable/ic_nav_settings"
