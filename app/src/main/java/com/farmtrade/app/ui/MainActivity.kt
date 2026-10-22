@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupBottomNav() {
-        binding.bottomNav.selectedItemId = R.id.nav_record
+        // 先挂监听再设默认选中项，这样下面用 start_tab 指定初始页时也能真正切过去
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_record -> switchFragment(recordListFragment)
@@ -66,6 +66,20 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
+        // 调试用：am start ... --es start_tab chart|summary|settings
+        // 正常启动不带该 extra，行为与原来完全一致
+        val startTab = intent.getStringExtra(EXTRA_START_TAB)
+        binding.bottomNav.selectedItemId = when (startTab) {
+            "chart" -> R.id.nav_chart
+            "summary" -> R.id.nav_summary
+            "settings" -> R.id.nav_settings
+            else -> R.id.nav_record
+        }
+    }
+
+    companion object {
+        /** 调试用：指定启动时显示哪个页签 */
+        const val EXTRA_START_TAB = "start_tab"
     }
 
     /**
