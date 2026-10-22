@@ -361,9 +361,15 @@ class RecordAdapter(
             b.tvUnitName.text = " ${record.unitName}"
         } else {
             b.layoutWeight.visibility = View.VISIBLE; b.layoutQuantity.visibility = View.GONE
+            // 总重 / 车重保持原单位（公斤）
             b.tvGrossWeight.text = "总重:${Record.formatNumber(record.grossWeight)}"
-            b.tvTareWeight.text = withCarryOver("车重:${Record.formatNumber(record.vehicleWeight)}", record.isCarryOver, orange)
-            b.tvNetWeight.text = "净重:${Record.formatNumber(record.netWeight)} ${record.unitName}"
+            b.tvTareWeight.text = withCarryOver(
+                "车重:${Record.formatNumber(record.vehicleWeight)}",
+                record.isCarryOver, orange
+            )
+            // 净重单独按「斤」显示：公斤模式 ×2，斤模式原值
+            val netJin = if (record.measureMode == Record.MODE_WEIGHT_KG) record.netWeight * 2 else record.netWeight
+            b.tvNetWeight.text = "净重:${Record.formatNumber(netJin)} 斤"
         }
 
         val priceUnit = when (record.measureMode) {

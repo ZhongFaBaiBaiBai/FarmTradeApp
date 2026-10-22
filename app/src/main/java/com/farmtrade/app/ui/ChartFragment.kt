@@ -1,5 +1,6 @@
 package com.farmtrade.app.ui
 
+import android.app.DatePickerDialog
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.TextUtils
@@ -15,6 +16,7 @@ import com.farmtrade.app.R
 import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.FragmentChartBinding
+import com.google.android.material.chip.Chip
 import java.util.Calendar
 
 /**
@@ -37,6 +39,8 @@ class ChartFragment : Fragment() {
     private lateinit var dbHelper: DatabaseHelper
 
     private var periodMode = PeriodMode.MONTH
+    /** 货物类型筛选；null = 全部 */
+    private var typeFilter: String? = null
     private val selCal: Calendar = Calendar.getInstance()
 
     override fun onCreateView(
@@ -53,6 +57,8 @@ class ChartFragment : Fragment() {
         dbHelper = DatabaseHelper(requireContext())
         setupToggle()
         setupPeriodSelector()
+        setupDatePicker()
+        setupTypeFilter()
         binding.togglePeriod.check(binding.btnPeriodMonth.id)
         refresh()
     }
@@ -83,6 +89,51 @@ class ChartFragment : Fragment() {
         binding.btnNext.setOnClickListener { shiftPeriod(1) }
     }
 
+    /** 点日期文字直接弹日历选，不用一页页翻 */
+    private fun setupDatePicker() {
+        binding.tvPeriodLabel.setOnClickListener {
+            DatePickerDialog(
+                requireContext(),
+                { _, year, month, day ->
+                    when (periodMode) {
+                        PeriodMode.DAY -> selCal.set(year, month, day)
+                        PeriodMode.MONTH -> selCal.set(year, month, 1)
+                        PeriodMode.QUARTER -> selCal.set(year, month, 1)
+                        PeriodMode.YEAR -> selCal.set(year, 0, 1)
+                    }
+                    refresh()
+                },
+                selCal.get(Calendar.YEAR),
+                selCal.get(Calendar.MONTH),
+                selCal.get(Calendar.DAY_OF_MONTH)
+            ).show()
+        }
+    }
+
+    /** 按货物类型筛选：全部 + 数据库里的所有类型 */
+    private fun setupTypeFilter() {
+        val group = binding.chipGroupTypeFilter
+        group.removeAllViews()
+        val types = mutableListOf("全部")
+        types.addAll(dbHelper.getAllTypes().filter { it.isNotBlank() })
+
+        types.forEachIndexed { index, name ->
+            val chip = Chip(requireContext()).apply {
+                text = name
+                isCheckable = true
+                isChecked = index == 0
+                textSize = 14f
+            }
+            group.addView(chip)
+        }
+        group.setOnCheckedStateChangeListener { g, checkedIds ->
+            if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
+            val chip = g.findViewById<Chip>(checkedIds[0]) ?: return@setOnCheckedStateChangeListener
+            typeFilter = if (chip.text.toString() == "全部") null else chip.text.toString()
+            refresh()
+        }
+    }
+
     private fun shiftPeriod(direction: Int) {
         when (periodMode) {
             PeriodMode.DAY -> selCal.add(Calendar.DAY_OF_YEAR, direction)
@@ -103,7 +154,9 @@ class ChartFragment : Fragment() {
 
     private fun refresh() {
         updateLabel()
-        val records = loadRangeRecords().sortedBy { it.dateTime }
+        var records = loadRangeRecords()
+        typeFilter?.let { t -> records = records.filter { it.type == t } }
+        records = records.sortedBy { it.dateTime }
         updateOverview(records)
         updateTypeTable(records)
         updatePeriodTable(records)
@@ -113,12 +166,13 @@ class ChartFragment : Fragment() {
         val y = selCal.get(Calendar.YEAR)
         val m = selCal.get(Calendar.MONTH) + 1
         val d = selCal.get(Calendar.DAY_OF_MONTH)
-        binding.tvPeriodLabel.text = when (periodMode) {
+        val label = when (periodMode) {
             PeriodMode.DAY -> String.format("%d年%d月%d日", y, m, d)
             PeriodMode.MONTH -> String.format("%d年%d月", y, m)
             PeriodMode.QUARTER -> String.format("%d年Q%d", y, quarterOf(m))
             PeriodMode.YEAR -> String.format("%d年", y)
         }
+        binding.tvPeriodLabel.text = label + " ▼"
     }
 
     private fun loadRangeRecords(): List<Record> {
