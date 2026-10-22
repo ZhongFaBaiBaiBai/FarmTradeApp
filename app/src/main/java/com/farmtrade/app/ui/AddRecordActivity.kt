@@ -19,14 +19,11 @@ import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.ActivityAddRecordBinding
 import com.farmtrade.app.databinding.DialogCustomTypeBinding
 import com.farmtrade.app.util.OcrHelper
-import com.farmtrade.app.util.SpeechInputController
-import com.farmtrade.app.util.VoiceParser
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,7 +38,6 @@ import java.util.Locale
  * - 计量方式：按重量(公斤) / 按重量(斤) / 按数量
  * - 重量区：总重 / 车重（可拍照 OCR 识别） / 净重自动计算
  * - 单价 + 合计金额自动预览
- * - 顶部紫色语音输入条：语音识别后自动填写
  * - 保存：新增或更新记录
  * - 编辑模式：通过 [EXTRA_RECORD] 或 [EXTRA_RECORD_ID] 传入记录并预填
  */
@@ -74,11 +70,6 @@ class AddRecordActivity : AppCompatActivity() {
             if (granted) launchCamera() else toast("需要相机权限才能拍照识别")
         }
 
-    private val audioPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) onVoiceInputClicked() else toast("需要麦克风权限才能语音输入")
-        }
-
     private val takePictureLauncher =
         registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
             val uri = cameraImageUri
@@ -89,41 +80,10 @@ class AddRecordActivity : AppCompatActivity() {
             }
         }
 
-    // ===== 本地语音识别 =====
-    private lateinit var speechInput: SpeechInputController
-
-    /** 语音流程回调：更新提示条 UI，识别结果自动填充表单 */
-    private val speechCallbacks = object : SpeechInputController.Callbacks {
-        override fun onRecordingStarted(outputFile: File) {
-            binding.tvVoiceHint.text = "🎤 正在录音，点击停止..."
-            binding.layoutVoiceInput.setBackgroundColor(0xFFFFEBEE.toInt())
-        }
-
-        override fun onRecognized(text: String?) {
-            if (text.isNullOrEmpty()) {
-                toast("未识别到语音内容，请说得清晰一些")
-                return
-            }
-            val parsed = VoiceParser.parseForField(text, null)
-            // 兜底：一句话里没识别到任何数值/类型字段时（用户往往只说重量值），
-            // 把第一个数字当作总重填入
-            if (parsed.grossWeight == null && parsed.vehicleWeight == null &&
-                parsed.unitPrice == null && parsed.quantity == null && parsed.type == null
-            ) {
-                VoiceParser.firstNumber(parsed.convertedText)?.let { parsed.grossWeight = it }
-            }
-            applyVoiceResult(parsed)
-            toast("语音识别：${parsed.convertedText}")
-        }
-
-        override fun onError(message: String) = toast(message)
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAddRecordBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        speechInput = SpeechInputController(this, speechCallbacks)
 
         binding.ivBack.setOnClickListener { finish() }
 
@@ -190,11 +150,7 @@ class AddRecordActivity : AppCompatActivity() {
         binding.btnPhotoGross.setOnClickListener { requestCameraFor(0) }      // 单字段：总重
         binding.btnPhotoTare.setOnClickListener { requestCameraFor(1) }     // 单字段：车重
 
-        // 7. 顶部语音输入条（点击开始/停止录音）
-        binding.layoutVoiceInput.setOnClickListener { requestAudioPermissionAndStart() }
-        binding.btnMic.setOnClickListener { requestAudioPermissionAndStart() }
-
-        // 8. 保存
+        // 7. 保存
         binding.btnSave.setOnClickListener { saveRecord() }
 
         // 9. 编辑预填 or 初始化默认
@@ -222,6 +178,9 @@ class AddRecordActivity : AppCompatActivity() {
      * 若 [selected] 不在数据库中，会先持久化再加入。
      */
     private fun buildTypeChips(selected: String? = null) {
+        // 先摘下「+ 自定义」chip，重建类型列表后再挂回去，避免自定义入口被一起删掉
+        val customChip = binding.chipCustom
+        (customChip.parent as? android.view.ViewGroup)?.removeView(customChip)
         binding.chipGroupType.removeAllViews()
         var types = dbHelper.getAllTypes()
         if (selected != null && selected !in types) {
@@ -235,12 +194,16 @@ class AddRecordActivity : AppCompatActivity() {
                 text = type
                 isCheckable = true
                 isClickable = true
-                textSize = 16f
+                textSize = 15f
                 id = View.generateViewId()
             }
             binding.chipGroupType.addView(chip)
             if (type == target) chipToSelect = chip
         }
+        // 重新挂回「+ 自定义」
+        binding.chipGroupType.addView(customChip)
+        customChip.setOnClickListener { showCustomTypeDialog() }
+
         chipToSelect?.let {
             it.isChecked = true
             selectedType = it.text.toString()
@@ -371,67 +334,6 @@ class AddRecordActivity : AppCompatActivity() {
         }
     }
 
-    // ==================== 语音输入（本地 Vosk 离线识别） ====================
-
-    private fun requestAudioPermissionAndStart() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            onVoiceInputClicked()
-        } else {
-            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    /**
-     * 语音输入条被点击：
-     * - 未在录音 → 准备模型并开始录音
-     * - 正在录音 → 停止录音 → 识别 → 填充结果
-     */
-    private fun onVoiceInputClicked() {
-        if (speechInput.isRecording()) {
-            binding.tvVoiceHint.text = "点击说话，自动识别填写"
-            binding.layoutVoiceInput.setBackgroundColor(0xFFF3E5F5.toInt())
-            speechInput.stopAndRecognize()
-        } else {
-            speechInput.startFlow()
-        }
-    }
-
-    /** 将语音解析结果应用到对应输入项 */
-    private fun applyVoiceResult(r: VoiceParser.ParseResult) {
-        r.direction?.let { selectDirection(it) }
-        r.type?.let { selectType(it) }
-        r.measureMode?.let { selectMeasureMode(it) }
-        r.grossWeight?.let { binding.etGrossWeight.setText(Record.formatNumber(it)) }
-        r.vehicleWeight?.let { binding.etTareWeight.setText(Record.formatNumber(it)) }
-        r.quantity?.let { binding.etQuantity.setText(Record.formatNumber(it)) }
-        r.unitName?.let { binding.etUnitName.setText(it) }
-        r.unitPrice?.let { binding.etUnitPrice.setText(Record.formatNumber(it)) }
-        recalcNetAndTotal()
-    }
-
-    private fun selectDirection(dir: String) {
-        currentDirection = dir
-        binding.toggleDirection.check(if (dir == "卖出") binding.btnSell.id else binding.btnBuy.id)
-    }
-
-    private fun selectType(type: String) {
-        selectedType = type
-        buildTypeChips(type)
-    }
-
-    private fun selectMeasureMode(mode: String) {
-        binding.toggleMeasureMode.check(
-            when (mode) {
-                Record.MODE_WEIGHT_JIN -> binding.btnModeJin.id
-                Record.MODE_QUANTITY -> binding.btnModeQty.id
-                else -> binding.btnModeKg.id
-            }
-        )
-        applyMeasureMode(mode)
-    }
-
     // ==================== 编辑预填 ====================
 
     private fun prefillFromRecord(r: Record) {
@@ -523,11 +425,6 @@ class AddRecordActivity : AppCompatActivity() {
     // ==================== utils ====================
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-
-    override fun onDestroy() {
-        super.onDestroy()
-        speechInput.release()
-    }
 
     companion object {
         /** Parcelable Record，编辑或由快速记录"全部修改"跳转时携带 */

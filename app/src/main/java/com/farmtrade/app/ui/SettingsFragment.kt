@@ -110,8 +110,8 @@ class SettingsFragment : Fragment() {
         }
         binding.tvAppVersion.text = "版本：v$versionName ($versionCode)"
 
-        binding.tvAbout.text = "$appName 是一款专为农户设计的买卖记账工具，支持拍照识别、" +
-            "语音输入、手动记录，并提供图表统计与数据导出功能。所有数据均保存在本地手机中。\n\n" +
+        binding.tvAbout.text = "$appName 是一款专为农户设计的买卖记账工具，支持拍照识别、记录本批量录入、" +
+            "手动记录，并提供图表统计与数据导出功能。所有数据均保存在本地手机中。\n\n" +
             "跨手机合并：在旧手机「导出为 JSON」，把文件传到新手机，在新手机「导入记录」即可。"
     }
 

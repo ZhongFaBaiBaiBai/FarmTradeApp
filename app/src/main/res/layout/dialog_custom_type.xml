@@ -1,55 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="#ffffff"
-    android:paddingStart="24dp"
-    android:paddingEnd="24dp"
-    android:paddingTop="24dp"
-    android:paddingBottom="20dp">
+    android:background="@color/surface"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="16dp">
 
-    <!-- Label -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="输入新类型名称"
-        android:textColor="#333333"
-        android:textSize="20sp"
+        android:text="新建货物类型"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp"
         android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="14dp" />
 
-    <!-- EditText input -->
     <com.google.android.material.textfield.TextInputLayout
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        style="@style/Widget.FarmTrade.TextInputLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="20dp"
-        app:boxStrokeColor="#2e7d32"
-        app:hintTextColor="#2e7d32">
+        android:hint="例如：白萝卜">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etTypeName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="如: 白萝卜"
             android:inputType="text"
-            android:textSize="18sp"
             android:maxLines="1"
-            android:maxLength="20" />
+            android:maxLength="20"
+            android:textSize="16sp" />
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- Add button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnAdd"
+        style="@style/Widget.FarmTrade.Button"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:text="添加"
-        android:textSize="18sp"
-        android:textColor="#ffffff"
-        app:backgroundTint="#2e7d32"
-        app:cornerRadius="10dp" />
-
+        android:layout_height="50dp"
+        android:layout_marginTop="16dp"
+        android:text="添加" />
 </LinearLayout>

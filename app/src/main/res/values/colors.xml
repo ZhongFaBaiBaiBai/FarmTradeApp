@@ -1,28 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Green palette -->
-    <color name="green_primary">#2e7d32</color>
-    <color name="green_light">#e8f5e9</color>
-    <color name="green_dark">#1b5e20</color>
+    <!-- ==================== 品牌绿 ==================== -->
+    <color name="green_primary">#2E7D32</color>
+    <color name="green_primary_dark">#1B5E20</color>
+    <color name="green_primary_light">#43A047</color>
+    <color name="green_surface">#E8F5E9</color>
+    <color name="green_surface_strong">#C8E6C9</color>
 
-    <!-- Orange palette -->
-    <color name="orange_primary">#e65100</color>
-    <color name="orange_light">#fff3e0</color>
+    <!-- 兼容旧引用 -->
+    <color name="green_light">#E8F5E9</color>
+    <color name="green_dark">#1B5E20</color>
 
-    <!-- Blue palette -->
-    <color name="blue_primary">#1565c0</color>
-    <color name="blue_light">#e3f2fd</color>
+    <!-- ==================== 语义色 ==================== -->
+    <!-- 买入（支出）：绿 -->
+    <color name="buy_primary">#2E7D32</color>
+    <color name="buy_surface">#E8F5E9</color>
+    <!-- 卖出（收入）：红 -->
+    <color name="sell_primary">#C62828</color>
+    <color name="sell_surface">#FFEBEE</color>
+    <!-- 强调橙：记录本 / 提醒 -->
+    <color name="orange_primary">#EF6C00</color>
+    <color name="orange_light">#FFF3E0</color>
+    <color name="orange_surface">#FFF3E0</color>
+    <!-- 强调蓝：拍照 / 信息 -->
+    <color name="blue_primary">#1565C0</color>
+    <color name="blue_light">#E3F2FD</color>
+    <color name="blue_surface">#E3F2FD</color>
+    <!-- 强调紫：自定义 / 特殊 -->
+    <color name="purple_primary">#6A1B9A</color>
+    <color name="purple_light">#F3E5F5</color>
+    <color name="purple_surface">#F3E5F5</color>
+    <!-- 青色：手动批量 -->
+    <color name="teal_primary">#00695C</color>
+    <color name="teal_surface">#E0F2F1</color>
 
-    <!-- Purple palette -->
-    <color name="purple_primary">#7b1fa2</color>
-    <color name="purple_light">#f3e5f5</color>
+    <!-- ==================== 中性色 ==================== -->
+    <color name="bg_page">#F4F6F4</color>
+    <color name="background">#F4F6F4</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_muted">#FAFBFA</color>
+    <color name="border">#E4EAE5</color>
+    <color name="divider">#EDF1ED</color>
 
-    <!-- Neutral colors -->
-    <color name="border">#e8e8e8</color>
-    <color name="background">#f0f2f5</color>
-    <color name="text_primary">#333333</color>
-    <color name="text_secondary">#888888</color>
-    <color name="text_hint">#aaaaaa</color>
-    <color name="white">#ffffff</color>
+    <color name="text_primary">#1F2A24</color>
+    <color name="text_secondary">#6B7A72</color>
+    <color name="text_hint">#9AA8A0</color>
+    <color name="text_on_brand">#FFFFFF</color>
+
+    <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
+
+    <!-- ==================== 状态色 ==================== -->
+    <color name="danger">#D32F2F</color>
+    <color name="danger_surface">#FFEBEE</color>
+    <color name="warning">#EF6C00</color>
+    <color name="success">#2E7D32</color>
+
+    <!-- 输入框 / 占位 -->
+    <color name="input_fill">#F2F5F2</color>
+    <color name="chip_stroke">#D8E2D9</color>
+    <color name="handle_bar">#E0E6E1</color>
+    <color name="scrim">#33000000</color>
 </resources>

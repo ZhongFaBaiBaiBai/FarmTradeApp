@@ -1,214 +1,295 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#f0f2f5">
+    android:background="@color/bg_page">
 
-    <!-- Top green header -->
+    <!-- 页头 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="#2e7d32"
-        android:paddingTop="20dp"
-        android:paddingBottom="20dp"
+        android:background="@drawable/bg_header"
         android:paddingStart="20dp"
-        android:paddingEnd="20dp">
+        android:paddingEnd="20dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="16dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="设置"
-            android:textColor="#ffffff"
+            android:textColor="@color/white"
             android:textSize="22sp"
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- Scrollable content -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="14dp"
             android:paddingBottom="24dp">
 
-            <!-- App info card -->
-            <LinearLayout
+            <!-- ===== 应用信息 ===== -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#ffffff"
-                android:padding="16dp"
-                android:layout_marginBottom="14dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="应用信息"
-                    android:textColor="#333333"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="8dp">
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
                     <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="版本"
-                        android:textColor="#888888"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/tvAppVersion"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="版本：v1.0"
-                        android:textColor="#333333"
+                        android:text="应用信息"
+                        android:textColor="@color/text_primary"
                         android:textSize="16sp"
-                        android:textStyle="bold" />
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="应用名称"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/tvAppName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="农产品买卖记录"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/divider" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="版本"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/tvAppVersion"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="v1.0"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp" />
+                    </LinearLayout>
                 </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 数据导出 ===== -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
                     <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="应用名称"
-                        android:textColor="#888888"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/tvAppName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="农产品买卖记录"
-                        android:textColor="#333333"
+                        android:text="导出数据"
+                        android:textColor="@color/text_primary"
                         android:textSize="16sp"
-                        android:textStyle="bold" />
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExportExcel"
+                        style="@style/Widget.FarmTrade.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:text="导出为 Excel（查看用）"
+                        app:backgroundTint="@color/green_primary"
+                        app:icon="@drawable/ic_document"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconTint="@color/white" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExportJson"
+                        style="@style/Widget.FarmTrade.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="导出为 JSON（换机用）"
+                        app:backgroundTint="@color/blue_primary"
+                        app:icon="@drawable/ic_document"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconTint="@color/white" />
                 </LinearLayout>
-            </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-            <!-- Export all data button (Excel for human) -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnExportExcel"
+            <!-- ===== 数据导入 ===== -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="导出为 Excel（查看用）"
-                android:textColor="#ffffff"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
-                android:layout_marginBottom="10dp"
-                app:backgroundTint="#2e7d32"
-                app:cornerRadius="10dp"
-                app:icon="@android:drawable/ic_menu_save"
-                app:iconTint="#ffffff" />
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
 
-            <!-- Export JSON for cross-device merge -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnExportJson"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="导出为 JSON（传另一台手机用）"
-                android:textColor="#ffffff"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
-                android:layout_marginBottom="10dp"
-                app:backgroundTint="#1565c0"
-                app:cornerRadius="10dp"
-                app:icon="@android:drawable/ic_menu_save"
-                app:iconTint="#ffffff" />
-
-            <!-- Import JSON -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnImportJson"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="导入记录（从 JSON 文件）"
-                android:textColor="#f57c00"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
-                android:layout_marginBottom="14dp"
-                app:strokeColor="#f57c00"
-                app:strokeWidth="1.5dp"
-                app:cornerRadius="10dp"
-                app:icon="@android:drawable/ic_menu_upload"
-                app:iconTint="#f57c00" />
-
-            <!-- Clear all data button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnClearAll"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="清空所有数据"
-                android:textColor="#d32f2f"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
-                android:layout_marginBottom="14dp"
-                app:strokeColor="#d32f2f"
-                app:strokeWidth="1.5dp"
-                app:cornerRadius="10dp"
-                app:icon="@android:drawable/ic_menu_delete"
-                app:iconTint="#d32f2f" />
-
-            <!-- About card -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#ffffff"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="关于"
-                    android:textColor="#333333"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="10dp" />
-
-                <TextView
-                    android:id="@+id/tvAbout"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="农产品买卖记录是一款专为农户设计的买卖记账工具，支持拍照识别、语音输入、手动记录，并提供图表统计与数据导出功能。"
-                    android:textColor="#666666"
-                    android:textSize="15sp"
-                    android:lineSpacingExtra="4dp" />
-            </LinearLayout>
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="导入数据"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnImportJson"
+                        style="@style/Widget.FarmTrade.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="从 JSON 文件导入记录"
+                        android:textColor="@color/orange_primary"
+                        app:icon="@drawable/ic_document"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconTint="@color/orange_primary"
+                        app:strokeColor="@color/orange_primary" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 危险操作 ===== -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="危险操作"
+                        android:textColor="@color/danger"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnClearAll"
+                        style="@style/Widget.FarmTrade.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="清空所有数据"
+                        android:textColor="@color/danger"
+                        app:icon="@drawable/ic_delete"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconTint="@color/danger"
+                        app:strokeColor="@color/danger" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 关于 ===== -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="关于"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/tvAbout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="农产品买卖记录是一款专为农户设计的记账工具，支持拍照识别、记录本批量录入与手动记录，并提供图表统计与数据导出功能。"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:lineSpacingExtra="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

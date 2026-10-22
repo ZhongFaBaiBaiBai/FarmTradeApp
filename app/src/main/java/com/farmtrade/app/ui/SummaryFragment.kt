@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -386,8 +387,8 @@ class SummaryFragment : Fragment() {
         val tv = TextView(requireContext()).apply {
             text = "暂无数据"
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#aaaaaa"))
-            textSize = 16f
+            setTextColor(ContextCompat.getColor(requireContext(), R.color.text_hint))
+            textSize = 15f
         }
         parent.addView(
             tv,
@@ -430,8 +431,8 @@ class SummaryFragment : Fragment() {
                 setPadding(4, 14, 4, 14)
             }
             val tvName = TextView(ctx).apply {
-                textSize = 18f
-                setTextColor(Color.parseColor("#333333"))
+                textSize = 15f
+                setTextColor(ContextCompat.getColor(ctx, R.color.text_primary))
                 layoutParams = LinearLayout.LayoutParams(
                     0,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -439,8 +440,8 @@ class SummaryFragment : Fragment() {
                 )
             }
             val tvAmount = TextView(ctx).apply {
-                textSize = 18f
-                setTextColor(Color.parseColor("#2e7d32"))
+                textSize = 16f
+                setTextColor(ContextCompat.getColor(ctx, R.color.green_primary))
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.END
                 layoutParams = LinearLayout.LayoutParams(
@@ -469,7 +470,7 @@ class SummaryFragment : Fragment() {
     }
 
     companion object {
-        private val GREEN = Color.parseColor("#2e7d32")
-        private val ORANGE = Color.parseColor("#e65100")
+        private val GREEN = 0xFF2E7D32.toInt()
+        private val ORANGE = 0xFFEF6C00.toInt()
     }
 }

@@ -336,7 +336,7 @@ class ChartFragment : Fragment() {
         val tv = TextView(requireContext()).apply {
             text = "暂无数据"
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#aaaaaa"))
+            setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.text_hint))
             textSize = 16f
         }
         frame.addView(

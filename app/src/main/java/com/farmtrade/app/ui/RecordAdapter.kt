@@ -1,5 +1,7 @@
 package com.farmtrade.app.ui
 
+import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
@@ -113,6 +115,7 @@ class RecordAdapter(
 
     private fun bindHeader(holder: GroupHeaderViewHolder, item: ListItem) {
         val b = holder.binding
+        val ctx = b.root.context
         when (item) {
             is ListItem.DateHeader -> {
                 // ===== 日期头：最外层，最大最醒目 =====
@@ -124,7 +127,7 @@ class RecordAdapter(
                 b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
                 b.tvSubtotal.textSize = 20f
                 b.tvSubtotal.setTextColor(0xFF1B5E20.toInt())
-                b.root.setBackgroundColor(0xFFFFFFFF.toInt())
+                b.root.background = roundedBg(ctx, 0xFFFFFFFF.toInt())
                 b.ivArrow.visibility = View.GONE
                 b.root.setPadding(16, 20, 16, 14)
                 b.root.setOnClickListener(null)
@@ -139,7 +142,7 @@ class RecordAdapter(
                 b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
                 b.tvSubtotal.textSize = 18f
                 b.tvSubtotal.setTextColor(0xFF2E7D32.toInt())
-                b.root.setBackgroundColor(0xFFF1F8E9.toInt())
+                b.root.background = roundedBg(ctx, 0xFFF1F8E9.toInt())
                 b.ivArrow.visibility = View.GONE
                 b.root.setPadding(28, 16, 16, 12)
                 b.root.setOnClickListener(null)
@@ -154,7 +157,7 @@ class RecordAdapter(
                 b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
                 b.tvSubtotal.textSize = 17f
                 b.tvSubtotal.setTextColor(0xFF558B2F.toInt())
-                b.root.setBackgroundColor(0xFFFFFFFE.toInt())
+                b.root.background = roundedBg(ctx, 0xFFFFFFFE.toInt())
                 b.ivArrow.visibility = View.GONE
                 b.root.setPadding(48, 14, 16, 14)
                 // 保留点击折叠功能，但视觉上不显示箭头
@@ -342,13 +345,13 @@ class RecordAdapter(
         val orange = ContextCompat.getColor(ctx, R.color.orange_primary)
 
         b.tvTag.text = record.direction
-        b.tvTag.setBackgroundColor(if (isBuy) green else orange)
+        b.tvTag.background = roundedBg(ctx, if (isBuy) green else orange)
         b.tvDateTime.text = record.dateTime
         b.tvTypeName.text = record.type
 
         when (record.source) {
-            Record.SOURCE_PHOTO -> { b.tvSourceBadge.text = "📷拍照"; b.tvSourceBadge.visibility = View.VISIBLE }
-            Record.SOURCE_VOICE -> { b.tvSourceBadge.text = "🎤语音"; b.tvSourceBadge.visibility = View.VISIBLE }
+            Record.SOURCE_PHOTO -> { b.tvSourceBadge.text = "拍照"; b.tvSourceBadge.visibility = View.VISIBLE }
+            Record.SOURCE_VOICE -> { b.tvSourceBadge.text = "语音"; b.tvSourceBadge.visibility = View.VISIBLE }
             else -> b.tvSourceBadge.visibility = View.GONE
         }
 
@@ -371,6 +374,14 @@ class RecordAdapter(
         b.tvTotalAmount.text = "￥${Record.formatMoney(record.totalAmount)}"
         b.tvTotalAmount.setTextColor(if (isBuy) green else orange)
     }
+
+    /** 生成圆角背景，替代 setBackgroundColor 的直角色块 */
+    private fun roundedBg(ctx: Context, color: Int, radiusDp: Float = 12f): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radiusDp * ctx.resources.displayMetrics.density
+            setColor(color)
+        }
 
     private fun withCarryOver(base: String, carryOver: Boolean, color: Int): CharSequence {
         if (!carryOver) return base

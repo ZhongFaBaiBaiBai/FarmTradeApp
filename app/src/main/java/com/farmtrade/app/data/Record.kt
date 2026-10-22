@@ -18,7 +18,7 @@ import kotlinx.parcelize.Parcelize
  * @param unitPrice 单价
  * @param totalAmount 总金额 (自动计算: 净重×单价 或 数量×单价)
  * @param photoPath 拍照图片路径 (可选)
- * @param source 来源: "PHOTO"(拍照) / "VOICE"(语音) / "MANUAL"(手动)
+ * @param source 来源: "PHOTO"(拍照) / "VOICE"(旧版语音，仅兼容历史数据) / "MANUAL"(手动)
  * @param isCarryOver 车重和单价是否沿用上一条记录
  */
 @Parcelize
@@ -100,6 +100,7 @@ data class Record(
 
         // 来源常量
         const val SOURCE_PHOTO = "PHOTO"
+        /** 旧版语音录入遗留值，保留用于兼容历史数据 */
         const val SOURCE_VOICE = "VOICE"
         const val SOURCE_MANUAL = "MANUAL"
 
