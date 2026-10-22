@@ -390,7 +390,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         }
         dv.btnCancel.setOnClickListener { dialog.dismiss() }
         dv.btnConfirm.setOnClickListener {
-            val v = dv.etInput.text.toString().trim()
+            val v = dv.etInput.text?.toString().orEmpty().trim()
             applyFieldInput(field, v)
             doRecalcAndRender()
             dialog.dismiss()

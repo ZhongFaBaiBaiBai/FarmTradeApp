@@ -169,7 +169,7 @@ object QuickRecordEditDialogs {
                 .setView(dv2.root)
                 .setNegativeButton("取消", null)
                 .setPositiveButton("确定") { _, _ ->
-                    val v = dv2.etTypeName.text.toString().trim()
+                    val v = dv2.etTypeName.text?.toString().orEmpty().trim()
                     if (v.isNotBlank()) {
                         host.pendingRecord.type = v
                         host.recalcAndRender()

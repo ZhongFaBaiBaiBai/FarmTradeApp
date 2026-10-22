@@ -94,7 +94,7 @@ object DatePickerDialogs {
                 activity,
                 { _, hour, minute ->
                     // 在当前文本框的日期基础上加上时分
-                    val currentText = dv.etDatetimeText.text.toString().trim()
+                    val currentText = dv.etDatetimeText.text?.toString().orEmpty().trim()
                     val datePart = dateOnlyRegex.find(currentText)?.value
                         ?: dateFormat.format(cal.time)
                     dv.etDatetimeText.setText("$datePart ${String.format("%02d:%02d", hour, minute)}")
@@ -108,7 +108,7 @@ object DatePickerDialogs {
         dv.btnCancelDatetime.setOnClickListener { dialog.dismiss() }
 
         dv.btnConfirmDatetime.setOnClickListener {
-            val raw = dv.etDatetimeText.text.toString().trim()
+            val raw = dv.etDatetimeText.text?.toString().orEmpty().trim()
             if (raw.isEmpty()) {
                 Toast.makeText(activity, "请输入日期", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener

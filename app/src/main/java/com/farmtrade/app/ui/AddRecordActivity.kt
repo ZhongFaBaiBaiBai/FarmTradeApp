@@ -141,7 +141,7 @@ class AddRecordActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 if (measureMode == Record.MODE_QUANTITY) {
-                    binding.tvUnitPriceLabel.text = "单价（元/${s?.ifBlank { "个" }}）"
+                    binding.tvUnitPriceLabel.text = "单价（元/${s?.toString().orEmpty().ifBlank { "个" }}）"
                 }
             }
         })
@@ -216,7 +216,7 @@ class AddRecordActivity : AppCompatActivity() {
         val dv = DialogCustomTypeBinding.inflate(layoutInflater)
         val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
         dv.btnAdd.setOnClickListener {
-            val name = dv.etTypeName.text.toString().trim()
+            val name = dv.etTypeName.text?.toString().orEmpty().trim()
             if (name.isBlank()) {
                 toast("请输入类型名称")
                 return@setOnClickListener
@@ -239,7 +239,7 @@ class AddRecordActivity : AppCompatActivity() {
         if (mode == Record.MODE_QUANTITY) {
             binding.layoutWeightSection.visibility = View.GONE
             binding.layoutQuantitySection.visibility = View.VISIBLE
-            binding.tvUnitPriceLabel.text = "单价（元/${binding.etUnitName.text.ifBlank { "个" }}）"
+            binding.tvUnitPriceLabel.text = "单价（元/${binding.etUnitName.text?.toString().orEmpty().ifBlank { "个" }}）"
         } else {
             binding.layoutWeightSection.visibility = View.VISIBLE
             binding.layoutQuantitySection.visibility = View.GONE
@@ -253,10 +253,10 @@ class AddRecordActivity : AppCompatActivity() {
 
     private fun recalcNetAndTotal() {
         if (!this::binding.isInitialized) return
-        val gross = binding.etGrossWeight.text.toString().toDoubleOrNull() ?: 0.0
-        val tare = binding.etTareWeight.text.toString().toDoubleOrNull() ?: 0.0
-        val qty = binding.etQuantity.text.toString().toDoubleOrNull() ?: 0.0
-        val price = binding.etUnitPrice.text.toString().toDoubleOrNull() ?: 0.0
+        val gross = binding.etGrossWeight.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
+        val tare = binding.etTareWeight.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
+        val qty = binding.etQuantity.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
+        val price = binding.etUnitPrice.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
         if (measureMode == Record.MODE_QUANTITY) {
             binding.tvNetWeight.text = Record.formatNumber(qty)
             binding.tvTotalPreview.text = "￥${Record.formatMoney(qty * price)}"
@@ -362,10 +362,10 @@ class AddRecordActivity : AppCompatActivity() {
     // ==================== 保存 ====================
 
     private fun saveRecord() {
-        val gross = binding.etGrossWeight.text.toString().toDoubleOrNull() ?: 0.0
-        val tare = binding.etTareWeight.text.toString().toDoubleOrNull() ?: 0.0
-        val qty = binding.etQuantity.text.toString().toDoubleOrNull() ?: 0.0
-        val price = binding.etUnitPrice.text.toString().toDoubleOrNull() ?: 0.0
+        val gross = binding.etGrossWeight.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
+        val tare = binding.etTareWeight.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
+        val qty = binding.etQuantity.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
+        val price = binding.etUnitPrice.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
 
         if (selectedType.isBlank()) {
             toast("请选择类型")
@@ -394,7 +394,7 @@ class AddRecordActivity : AppCompatActivity() {
         val unitName = when (measureMode) {
             Record.MODE_WEIGHT_KG -> "公斤"
             Record.MODE_WEIGHT_JIN -> "斤"
-            else -> binding.etUnitName.text.toString().trim().ifBlank { "个" }
+            else -> binding.etUnitName.text?.toString().orEmpty().trim().ifBlank { "个" }
         }
 
         val record = (editingRecord?.copy() ?: Record().also { it.source = Record.SOURCE_MANUAL }).apply {

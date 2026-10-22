@@ -159,8 +159,8 @@ class LedgerReviewActivity : AppCompatActivity() {
     }
 
     private fun saveAll() {
-        val type = binding.etLedgerType.text.toString().trim()
-        val price = binding.etLedgerPrice.text.toString().toDoubleOrNull() ?: 0.0
+        val type = binding.etLedgerType.text?.toString().orEmpty().trim()
+        val price = binding.etLedgerPrice.text?.toString().orEmpty().toDoubleOrNull() ?: 0.0
         if (type.isBlank()) {
             toast("请填写类型")
             return
