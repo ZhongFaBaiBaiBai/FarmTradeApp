@@ -9,9 +9,9 @@
         android:icon="@drawable/ic_nav_chart"
         android:title="汇总" />
     <item
-        android:id="@+id/nav_summary"
-        android:icon="@drawable/ic_nav_summary"
-        android:title="收支" />
+        android:id="@+id/nav_photos"
+        android:icon="@drawable/ic_photo"
+        android:title="图片" />
     <item
         android:id="@+id/nav_settings"
         android:icon="@drawable/ic_nav_settings"
