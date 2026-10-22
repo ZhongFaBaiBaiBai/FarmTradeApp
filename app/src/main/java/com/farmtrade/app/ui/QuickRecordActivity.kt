@@ -82,7 +82,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     // 买入(绿) / 卖出(红) 标签背景色
     private val buyBg = 0xFF2E7D32.toInt()
     private val buyFg = 0xFFFFFFFF.toInt()
-    private val sellBg = 0xFFC62828.toInt()
+    private val sellBg = 0xFFEF6C00.toInt()
     private val sellFg = 0xFFFFFFFF.toInt()
 
     // ==================== Activity Result ====================
