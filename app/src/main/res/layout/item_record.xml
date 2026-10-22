@@ -129,24 +129,22 @@
 
                 <TextView
                     android:id="@+id/tvGrossWeight"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:text="总重:0 公斤"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:maxLines="1" />
 
                 <TextView
                     android:id="@+id/tvTareWeight"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="18dp"
                     android:text="车重:0 公斤"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:maxLines="1" />
             </LinearLayout>
 
             <TextView

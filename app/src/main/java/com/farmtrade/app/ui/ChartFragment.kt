@@ -1,6 +1,5 @@
 package com.farmtrade.app.ui
 
-import android.app.DatePickerDialog
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.TextUtils
@@ -10,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.farmtrade.app.R
@@ -17,6 +17,7 @@ import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.FragmentChartBinding
 import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Calendar
 
 /**
@@ -89,25 +90,62 @@ class ChartFragment : Fragment() {
         binding.btnNext.setOnClickListener { shiftPeriod(1) }
     }
 
-    /** 点日期文字直接弹日历选，不用一页页翻 */
+    /**
+     * 点日期文字弹出「有记录的期间」列表直接跳转：
+     * - 日视图列出有记录的日期
+     * - 月/季视图列出有记录的月份（不让你去点具体哪一天）
+     * - 年视图列出有记录的年份
+     */
     private fun setupDatePicker() {
-        binding.tvPeriodLabel.setOnClickListener {
-            DatePickerDialog(
-                requireContext(),
-                { _, year, month, day ->
-                    when (periodMode) {
-                        PeriodMode.DAY -> selCal.set(year, month, day)
-                        PeriodMode.MONTH -> selCal.set(year, month, 1)
-                        PeriodMode.QUARTER -> selCal.set(year, month, 1)
-                        PeriodMode.YEAR -> selCal.set(year, 0, 1)
-                    }
-                    refresh()
-                },
-                selCal.get(Calendar.YEAR),
-                selCal.get(Calendar.MONTH),
-                selCal.get(Calendar.DAY_OF_MONTH)
-            ).show()
+        binding.tvPeriodLabel.setOnClickListener { showPeriodPicker() }
+    }
+
+    private fun showPeriodPicker() {
+        val all = dbHelper.getAllRecords()
+        val keys: List<String> = when (periodMode) {
+            PeriodMode.DAY -> all.map { it.dateTime.take(10) }.distinct().sortedDescending()
+            PeriodMode.MONTH, PeriodMode.QUARTER -> all.map { it.dateTime.take(7) }.distinct().sortedDescending()
+            PeriodMode.YEAR -> all.map { it.dateTime.take(4) }.distinct().sortedDescending()
         }
+        if (keys.isEmpty()) {
+            Toast.makeText(requireContext(), "还没有任何记录", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val labels = keys.map { formatPeriodOption(it) }.toTypedArray()
+        val title = when (periodMode) {
+            PeriodMode.DAY -> "选择日期（只列出有记录的）"
+            PeriodMode.MONTH, PeriodMode.QUARTER -> "选择月份（只列出有记录的）"
+            PeriodMode.YEAR -> "选择年份（只列出有记录的）"
+        }
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(title)
+            .setItems(labels) { _, which ->
+                val key = keys[which]
+                when (periodMode) {
+                    PeriodMode.DAY -> {
+                        val p = key.split("-")
+                        selCal.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt())
+                    }
+                    PeriodMode.MONTH, PeriodMode.QUARTER -> {
+                        val p = key.split("-")
+                        selCal.set(p[0].toInt(), p[1].toInt() - 1, 1)
+                    }
+                    PeriodMode.YEAR -> selCal.set(key.toInt(), 0, 1)
+                }
+                refresh()
+            }
+            .show()
+    }
+
+    private fun formatPeriodOption(key: String): String = when (periodMode) {
+        PeriodMode.DAY -> key
+        PeriodMode.MONTH, PeriodMode.QUARTER -> {
+            val p = key.split("-")
+            (p.getOrNull(0) ?: key) + "年" + (p.getOrNull(1)?.toIntOrNull() ?: "") + "月"
+        }
+        PeriodMode.YEAR -> key + "年"
     }
 
     /** 按货物类型筛选：全部 + 数据库里的所有类型 */
