@@ -3,11 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -26,8 +24,17 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".ui.AddRecordActivity" android:label="新增记录" />
-        <activity android:name=".ui.QuickRecordActivity" android:label="快速记录" />
+        <activity android:name=".ui.AddRecordActivity" android:label="记录详情" />
+        <!-- exported + 专用 action：便于自动化测试与外部触发识别（不会响应普通启动） -->
+        <activity
+            android:name=".ui.QuickRecordActivity"
+            android:label="拍照记录"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.farmtrade.app.action.QUICK_OCR" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity android:name=".ui.LedgerReviewActivity" android:label="记录本批量录入" />
 
         <!-- FileProvider：用于拍照（ActivityResultContracts.TakePicture）共享临时图片 -->

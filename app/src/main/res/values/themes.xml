@@ -1,34 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ==================== 应用主题 ==================== -->
     <style name="Theme.FarmTrade" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <!-- 品牌 -->
         <item name="colorPrimary">@color/green_primary</item>
-        <item name="colorPrimaryVariant">@color/green_dark</item>
+        <item name="colorPrimaryVariant">@color/green_primary_dark</item>
         <item name="colorOnPrimary">@color/white</item>
         <item name="colorSecondary">@color/orange_primary</item>
+        <item name="colorSecondaryVariant">@color/orange_primary</item>
         <item name="colorOnSecondary">@color/white</item>
-        <item name="android:statusBarColor">@color/green_primary</item>
+        <item name="colorError">@color/danger</item>
+        <item name="colorOnError">@color/white</item>
+
+        <!-- 表面 -->
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:colorBackground">@color/bg_page</item>
+        <item name="android:windowBackground">@color/bg_page</item>
+
+        <!-- 状态栏 / 导航栏 -->
+        <item name="android:statusBarColor">@color/green_primary_dark</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+
+        <!-- 文字 -->
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_hint</item>
+
+        <!-- 组件默认样式：布局里不用再重复写 -->
+        <item name="materialButtonStyle">@style/Widget.FarmTrade.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.FarmTrade.Button.Outlined</item>
+        <item name="chipStyle">@style/Widget.FarmTrade.Chip</item>
+        <item name="textInputStyle">@style/Widget.FarmTrade.TextInputLayout</item>
+        <item name="materialCardViewStyle">@style/Widget.FarmTrade.Card</item>
+        <item name="bottomNavigationStyle">@style/Widget.FarmTrade.BottomNav</item>
+        <item name="floatingActionButtonStyle">@style/Widget.FarmTrade.Fab</item>
+
+        <!-- 弹窗 -->
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.FarmTrade.BottomSheetDialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.FarmTrade.Dialog</item>
+        <item name="android:windowContentTransitions" tools:targetApi="21">true</item>
     </style>
 
+    <!-- 启动页 / 欢迎页可复用 -->
+    <style name="Theme.FarmTrade.Splash" parent="Theme.FarmTrade">
+        <item name="android:windowBackground">@color/green_primary</item>
+    </style>
+
+    <!-- ==================== 底部弹层 ==================== -->
+    <style name="ThemeOverlay.FarmTrade.BottomSheetDialog" parent="ThemeOverlay.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.FarmTrade.BottomSheet</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Widget.FarmTrade.BottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="android:background">@drawable/bg_bottom_sheet</item>
+    </style>
+
+    <!-- ==================== 对话框 ==================== -->
+    <style name="ThemeOverlay.FarmTrade.Dialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.FarmTrade.Dialog</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.FarmTrade.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <!-- ==================== 兼容旧样式名 ==================== -->
     <style name="LargeText">
         <item name="android:textSize">18sp</item>
-        <item name="android:textColor">@color/black</item>
+        <item name="android:textColor">@color/text_primary</item>
     </style>
 
     <style name="ExtraLargeText">
         <item name="android:textSize">22sp</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_primary</item>
     </style>
 
     <style name="TitleText">
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/white</item>
+        <item name="android:textColor">@color/text_on_brand</item>
     </style>
 
     <style name="CardStyle">
-        <item name="cardBackgroundColor">@color/white</item>
-        <item name="cardCornerRadius">12dp</item>
+        <item name="cardBackgroundColor">@color/surface</item>
+        <item name="cardCornerRadius">@dimen/radius_m</item>
         <item name="cardElevation">2dp</item>
     </style>
+
 </resources>

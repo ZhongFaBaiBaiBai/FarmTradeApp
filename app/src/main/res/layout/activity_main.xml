@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:background="@color/bg_page">
 
     <!-- Fragment 容器 -->
     <FrameLayout
@@ -18,10 +18,11 @@
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#ffffff"
-        app:labelVisibilityMode="labeled"
-        app:itemTextColor="@color/bottom_nav_color"
+        android:background="@drawable/bg_bottom_nav"
+        android:elevation="8dp"
+        app:itemIconSize="23dp"
         app:itemIconTint="@color/bottom_nav_color"
-        app:elevation="8dp"
+        app:itemTextColor="@color/bottom_nav_color"
+        app:labelVisibilityMode="labeled"
         app:menu="@menu/bottom_nav_menu" />
 </LinearLayout>

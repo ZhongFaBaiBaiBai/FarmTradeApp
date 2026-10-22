@@ -1,560 +1,565 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#f0f2f5">
+    android:background="@color/bg_page">
 
-    <!-- Top green header -->
+    <!-- ============ 页头 ============ -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#2e7d32"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp">
+        android:background="@drawable/bg_header"
+        android:paddingStart="12dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="14dp">
 
         <ImageView
             android:id="@+id/ivBack"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@android:drawable/ic_media_previous"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_back"
             android:contentDescription="返回"
-            app:tint="#ffffff" />
+            android:background="@drawable/bg_header_icon"
+            android:clickable="true"
+            android:focusable="true"
+            app:tint="@color/white" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:layout_marginStart="12dp"
             android:text="添加记录"
-            android:textColor="#ffffff"
+            android:textColor="@color/white"
             android:textSize="20sp"
-            android:textStyle="bold"
-            android:gravity="center" />
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/btnSave"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:minWidth="72dp"
+            android:layout_height="38dp"
             android:text="保存"
-            android:textColor="#2e7d32"
-            android:textSize="16sp"
+            android:textColor="@color/green_primary"
+            android:textSize="14sp"
             android:textStyle="bold"
-            android:background="@android:drawable/btn_default"
-            android:backgroundTint="#ffffff"
             android:gravity="center"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:background="@drawable/bg_pill_white"
             android:clickable="true"
-            android:focusable="true"
-            android:foreground="?android:attr/selectableItemBackground" />
+            android:focusable="true" />
     </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="28dp">
 
-            <!-- Voice input bar (purple) -->
-            <LinearLayout
-                android:id="@+id/layoutVoiceInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="#f3e5f5"
-                android:padding="14dp"
-                android:layout_marginBottom="12dp">
-
-                <ImageView
-                    android:id="@+id/btnMic"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@android:drawable/ic_btn_speak_now"
-                    android:background="@android:drawable/presence_audio_online"
-                    android:contentDescription="语音输入"
-                    app:tint="#7b1fa2" />
-
-                <TextView
-                    android:id="@+id/tvVoiceHint"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="点击说话，自动识别填写"
-                    android:textColor="#7b1fa2"
-                    android:textSize="16sp"
-                    android:layout_marginStart="12dp" />
-            </LinearLayout>
-
-            <!-- Date time field (now clickable → 滚轮+文本双入口弹窗) -->
-            <LinearLayout
+            <!-- ===== 日期时间 ===== -->
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/rowDateTime"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="#ffffff"
-                android:padding="14dp"
                 android:layout_marginBottom="12dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground">
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="日期时间"
-                    android:textColor="#333333"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:id="@+id/tvDateTime"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="#2e7d32"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:gravity="end" />
-            </LinearLayout>
-
-            <!-- Direction toggle (买入/卖出) -->
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/toggleDirection"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:singleSelection="true"
-                app:selectionRequired="true"
-                android:layout_marginBottom="12dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnBuy"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="买入"
-                    android:textSize="18sp"
-                    android:textColor="#2e7d32" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSell"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="卖出"
-                    android:textSize="18sp"
-                    android:textColor="#e65100" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
-
-            <!-- Type chips horizontal scroll + 自定义 button -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="选择类型"
-                android:textColor="#333333"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="6dp" />
-
-            <HorizontalScrollView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:scrollbars="none"
-                android:layout_marginBottom="12dp">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.chip.ChipGroup
-                        android:id="@+id/chipGroupType"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        app:singleSelection="true"
-                        app:selectionRequired="true">
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chipType0"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="大白菜"
-                            android:textSize="16sp" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chipType1"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="土豆"
-                            android:textSize="16sp" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chipType2"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="西红柿"
-                            android:textSize="16sp" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chipType3"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="黄瓜"
-                            android:textSize="16sp" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chipType4"
-                            style="@style/Widget.MaterialComponents.Chip.Choice"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="辣椒"
-                            android:textSize="16sp" />
-                    </com.google.android.material.chip.ChipGroup>
-
-                    <!-- + 自定义 button -->
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipCustom"
-                        style="@style/Widget.MaterialComponents.Chip.Action"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="+ 自定义"
-                        android:textSize="16sp"
-                        android:textColor="#2e7d32"
-                        app:chipBackgroundColor="#e8f5e9"
-                        app:chipStrokeColor="#2e7d32"
-                        app:chipStrokeWidth="1dp" />
-                </LinearLayout>
-            </HorizontalScrollView>
-
-            <!-- Measure mode toggle -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="计量方式"
-                android:textColor="#333333"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="6dp" />
-
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/toggleMeasureMode"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:singleSelection="true"
-                app:selectionRequired="true"
-                android:layout_marginBottom="12dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnModeKg"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="按重量(公斤)"
-                    android:textSize="15sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnModeJin"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="按重量(斤)"
-                    android:textSize="15sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnModeQty"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="按数量"
-                    android:textSize="15sp" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
-
-            <!-- Weight section -->
-            <LinearLayout
-                android:id="@+id/layoutWeightSection"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="visible">
-
-                <!-- 总重 + 车重 row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="8dp">
-
-                    <!-- 总重 with photo button -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:background="#ffffff"
-                        android:padding="12dp"
-                        android:layout_marginEnd="6dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="总重"
-                                android:textColor="#333333"
-                                android:textSize="16sp" />
-
-                            <View
-                                android:layout_width="0dp"
-                                android:layout_height="0dp"
-                                android:layout_weight="1" />
-
-                            <ImageView
-                                android:id="@+id/btnPhotoGross"
-                                android:layout_width="28dp"
-                                android:layout_height="28dp"
-                                android:src="@android:drawable/ic_menu_camera"
-                                android:contentDescription="拍照识别总重"
-                                app:tint="#1565c0" />
-                        </LinearLayout>
-
-                        <EditText
-                            android:id="@+id/etGrossWeight"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="输入总重"
-                            android:inputType="numberDecimal"
-                            android:textSize="18sp"
-                            android:textColor="#333333"
-                            android:textColorHint="#aaaaaa" />
-                    </LinearLayout>
-
-                    <!-- 车重 with photo button -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:background="#ffffff"
-                        android:padding="12dp"
-                        android:layout_marginStart="6dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="车重"
-                                android:textColor="#333333"
-                                android:textSize="16sp" />
-
-                            <View
-                                android:layout_width="0dp"
-                                android:layout_height="0dp"
-                                android:layout_weight="1" />
-
-                            <ImageView
-                                android:id="@+id/btnPhotoTare"
-                                android:layout_width="28dp"
-                                android:layout_height="28dp"
-                                android:src="@android:drawable/ic_menu_camera"
-                                android:contentDescription="拍照识别车重"
-                                app:tint="#1565c0" />
-                        </LinearLayout>
-
-                        <EditText
-                            android:id="@+id/etTareWeight"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="输入车重"
-                            android:inputType="numberDecimal"
-                            android:textSize="18sp"
-                            android:textColor="#333333"
-                            android:textColorHint="#aaaaaa" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- 净重 (auto calculated, green background) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:background="#e8f5e9"
-                    android:padding="14dp"
-                    android:layout_marginBottom="12dp">
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_calendar"
+                        android:contentDescription="日期"
+                        app:tint="@color/green_primary" />
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="净重（自动计算）"
-                        android:textColor="#2e7d32"
-                        android:textSize="16sp" />
-
-                    <View
                         android:layout_width="0dp"
-                        android:layout_height="0dp"
-                        android:layout_weight="1" />
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:text="日期时间"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp" />
 
                     <TextView
-                        android:id="@+id/tvNetWeight"
+                        android:id="@+id/tvDateTime"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0.0"
-                        android:textColor="#2e7d32"
-                        android:textSize="20sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-            </LinearLayout>
+                        android:text="2026-09-01 10:30"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="15sp" />
 
-            <!-- Quantity section (visible when mode=QUANTITY) -->
-            <LinearLayout
-                android:id="@+id/layoutQuantitySection"
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginStart="6dp"
+                        android:src="@drawable/ic_chevron_right"
+                        android:contentDescription="选择"
+                        app:tint="@color/text_hint" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 买卖方向 ===== -->
+            
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:background="#ffffff"
-                android:padding="12dp"
                 android:layout_marginBottom="12dp"
-                android:visibility="gone">
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginEnd="6dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="数量"
-                        android:textColor="#333333"
-                        android:textSize="16sp" />
-
-                    <EditText
-                        android:id="@+id/etQuantity"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="输入数量"
-                        android:inputType="numberDecimal"
-                        android:textSize="18sp"
-                        android:textColorHint="#aaaaaa" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="6dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="单位名称"
-                        android:textColor="#333333"
-                        android:textSize="16sp" />
-
-                    <EditText
-                        android:id="@+id/etUnitName"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="如: 袋/筐/箱"
-                        android:inputType="text"
-                        android:textSize="18sp"
-                        android:textColorHint="#aaaaaa" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- Unit price field -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#ffffff"
-                android:padding="12dp"
-                android:layout_marginBottom="12dp">
-
-                <TextView
-                    android:id="@+id/tvUnitPriceLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="单价（元/斤）"
-                    android:textColor="#333333"
-                    android:textSize="16sp" />
-
-                <EditText
-                    android:id="@+id/etUnitPrice"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="输入单价 (元)"
-                    android:inputType="numberDecimal"
-                    android:textSize="18sp"
-                    android:textColorHint="#aaaaaa" />
-            </LinearLayout>
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-            <!-- Total preview (green background, large) -->
-            <LinearLayout
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="买卖方向"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/toggleDirection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnBuy"
+                            style="@style/Widget.FarmTrade.Button.Toggle"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:text="买入" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSell"
+                            style="@style/Widget.FarmTrade.Button.Toggle"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:text="卖出" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 类型 ===== -->
+            
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="#e8f5e9"
-                android:padding="18dp"
-                android:layout_marginBottom="16dp">
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="合计金额"
-                    android:textColor="#2e7d32"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="0dp"
-                    android:layout_weight="1" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="货物类型"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
 
-                <TextView
-                    android:id="@+id/tvTotalPreview"
-                    android:layout_width="wrap_content"
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipGroupType"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:chipSpacingHorizontal="8dp"
+                        app:chipSpacingVertical="4dp"
+                        app:singleSelection="true">
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipType0"
+                            style="@style/Widget.FarmTrade.Chip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="大白菜" />
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipType1"
+                            style="@style/Widget.FarmTrade.Chip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="土豆" />
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipType2"
+                            style="@style/Widget.FarmTrade.Chip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="西红柿" />
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipType3"
+                            style="@style/Widget.FarmTrade.Chip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="黄瓜" />
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipType4"
+                            style="@style/Widget.FarmTrade.Chip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="辣椒" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipCustom"
+                            style="@style/Widget.FarmTrade.Chip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="+ 自定义" />
+                    </com.google.android.material.chip.ChipGroup>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 计量方式 ===== -->
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="￥0.00"
-                    android:textColor="#2e7d32"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="计量方式"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/toggleMeasureMode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnModeKg"
+                            style="@style/Widget.FarmTrade.Button.Toggle"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:text="公斤" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnModeJin"
+                            style="@style/Widget.FarmTrade.Button.Toggle"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:text="斤" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnModeQty"
+                            style="@style/Widget.FarmTrade.Button.Toggle"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:text="按数量" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 重量 / 数量 ===== -->
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="重量与数量"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <LinearLayout
+                        android:id="@+id/layoutWeightSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="visible">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                style="@style/Widget.FarmTrade.TextInputLayout"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:hint="总重">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/etGrossWeight"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:inputType="numberDecimal"
+                                    android:textSize="16sp" />
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <ImageView
+                                android:id="@+id/btnPhotoGross"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:layout_marginStart="8dp"
+                                android:padding="13dp"
+                                android:src="@drawable/ic_camera"
+                                android:contentDescription="拍照识别总重"
+                                android:background="@drawable/bg_pill_green"
+                                android:clickable="true"
+                                android:focusable="true"
+                                app:tint="@color/green_primary" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="10dp">
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                style="@style/Widget.FarmTrade.TextInputLayout"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:hint="车重">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/etTareWeight"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:inputType="numberDecimal"
+                                    android:textSize="16sp" />
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <ImageView
+                                android:id="@+id/btnPhotoTare"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:layout_marginStart="8dp"
+                                android:padding="13dp"
+                                android:src="@drawable/ic_camera"
+                                android:contentDescription="拍照识别车重"
+                                android:background="@drawable/bg_pill_green"
+                                android:clickable="true"
+                                android:focusable="true"
+                                app:tint="@color/green_primary" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/bg_pill_neutral"
+                            android:padding="12dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="净重（自动计算）"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:id="@+id/tvNetWeight"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textColor="@color/green_primary"
+                                android:textSize="18sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layoutQuantitySection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.FarmTrade.TextInputLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="数量">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etQuantity"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="numberDecimal"
+                                android:textSize="16sp" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.FarmTrade.TextInputLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:hint="单位名称（袋 / 桶 / 升）">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etUnitName"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="text"
+                                android:textSize="16sp" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ===== 单价与合计 ===== -->
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="单价与金额"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.FarmTrade.TextInputLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="单价">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etUnitPrice"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="numberDecimal"
+                            android:textSize="16sp" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView
+                        android:id="@+id/tvUnitPriceLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="单价（元/斤）"
+                        android:textColor="@color/text_hint"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_summary_gradient"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="合计金额"
+                            android:textColor="#CCFFFFFF"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tvTotalPreview"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="￥0.00"
+                            android:textColor="@color/white"
+                            android:textSize="24sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

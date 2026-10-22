@@ -18,7 +18,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var recordListFragment: RecordListFragment
     private lateinit var chartFragment: ChartFragment
-    private lateinit var summaryFragment: SummaryFragment
+    private lateinit var photoFragment: PhotoArchiveFragment
     private lateinit var settingsFragment: SettingsFragment
 
     private var currentFragment: Fragment? = null
@@ -32,14 +32,14 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             recordListFragment = RecordListFragment()
             chartFragment = ChartFragment()
-            summaryFragment = SummaryFragment()
+            photoFragment = PhotoArchiveFragment()
             settingsFragment = SettingsFragment()
 
             // 默认显示记录列表
             supportFragmentManager.beginTransaction()
                 .add(R.id.fragmentContainer, recordListFragment, "record")
                 .add(R.id.fragmentContainer, chartFragment, "chart").hide(chartFragment)
-                .add(R.id.fragmentContainer, summaryFragment, "summary").hide(summaryFragment)
+                .add(R.id.fragmentContainer, photoFragment, "photos").hide(photoFragment)
                 .add(R.id.fragmentContainer, settingsFragment, "settings").hide(settingsFragment)
                 .commit()
             currentFragment = recordListFragment
@@ -47,7 +47,7 @@ class MainActivity : AppCompatActivity() {
             // 恢复 Fragment 引用
             recordListFragment = supportFragmentManager.findFragmentByTag("record") as RecordListFragment
             chartFragment = supportFragmentManager.findFragmentByTag("chart") as ChartFragment
-            summaryFragment = supportFragmentManager.findFragmentByTag("summary") as SummaryFragment
+            photoFragment = supportFragmentManager.findFragmentByTag("photos") as PhotoArchiveFragment
             settingsFragment = supportFragmentManager.findFragmentByTag("settings") as SettingsFragment
             currentFragment = supportFragmentManager.findFragmentById(R.id.fragmentContainer)
         }
@@ -56,16 +56,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupBottomNav() {
-        binding.bottomNav.selectedItemId = R.id.nav_record
+        // 先挂监听再设默认选中项，这样下面用 start_tab 指定初始页时也能真正切过去
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_record -> switchFragment(recordListFragment)
                 R.id.nav_chart -> switchFragment(chartFragment)
-                R.id.nav_summary -> switchFragment(summaryFragment)
+                R.id.nav_photos -> switchFragment(photoFragment)
                 R.id.nav_settings -> switchFragment(settingsFragment)
             }
             true
         }
+        // 调试用：am start ... --es start_tab chart|summary|settings
+        // 正常启动不带该 extra，行为与原来完全一致
+        val startTab = intent.getStringExtra(EXTRA_START_TAB)
+        binding.bottomNav.selectedItemId = when (startTab) {
+            "chart" -> R.id.nav_chart
+            "photos" -> R.id.nav_photos
+            "settings" -> R.id.nav_settings
+            else -> R.id.nav_record
+        }
+    }
+
+    companion object {
+        /** 调试用：指定启动时显示哪个页签 */
+        const val EXTRA_START_TAB = "start_tab"
     }
 
     /**

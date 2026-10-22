@@ -5,211 +5,222 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#f0f2f5">
+    android:background="@color/bg_page">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Top green header -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="#2e7d32"
-            android:paddingTop="20dp"
-            android:paddingBottom="20dp"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="买卖记录"
-                android:textColor="#ffffff"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tvSelectedCount"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="#ffffff"
-                android:textSize="14sp"
-                android:layout_marginEnd="12dp"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/btnSelectAll"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="全选"
-                android:textColor="#ffffff"
-                android:textSize="15sp"
-                android:layout_marginEnd="12dp"
-                android:visibility="gone"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground" />
-
-            <TextView
-                android:id="@+id/btnBatchDelete"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="批量删除"
-                android:textColor="#ffcdd2"
-                android:textSize="15sp"
-                android:layout_marginEnd="12dp"
-                android:visibility="gone"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground" />
-
-            <TextView
-                android:id="@+id/btnBatchManage"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="管理"
-                android:textColor="#ffffff"
-                android:textSize="15sp"
-                android:layout_marginEnd="4dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground" />
-
-            <ImageView
-                android:id="@+id/ivSearch"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:src="@android:drawable/ic_menu_search"
-                android:contentDescription="搜索"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground"
-                app:tint="#ffffff" />
-
-            <ImageView
-                android:id="@+id/ivSort"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="8dp"
-                android:src="@android:drawable/ic_menu_sort_by_size"
-                android:contentDescription="排序"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground"
-                app:tint="#ffffff" />
-    </LinearLayout>
-
-        <!-- Filter chips horizontal scroll -->
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none"
-            android:background="#ffffff"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp">
-
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chipGroupFilter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:singleSelection="true"
-                app:selectionRequired="true"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp">
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipAll"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="全部"
-                    android:textSize="16sp"
-                    android:checked="true"
-                    app:chipBackgroundColor="#e8f5e9"
-                    app:chipStrokeColor="#2e7d32"
-                    app:chipStrokeWidth="1dp"
-                    app:chipCornerRadius="20dp" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipBuy"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="买入"
-                    android:textSize="16sp"
-                    app:chipBackgroundColor="#e8f5e9"
-                    app:chipStrokeColor="#2e7d32"
-                    app:chipStrokeWidth="1dp"
-                    app:chipCornerRadius="20dp" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipSell"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="卖出"
-                    android:textSize="16sp"
-                    app:chipBackgroundColor="#e8f5e9"
-                    app:chipStrokeColor="#2e7d32"
-                    app:chipStrokeWidth="1dp"
-                    app:chipCornerRadius="20dp" />
-
-                <!-- 日期范围筛选：点击弹出快捷选 + 自定义 -->
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipDateFilter"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="全部时间 ▼"
-                    android:textSize="15sp"
-                    android:checkable="false"
-                    app:chipBackgroundColor="#ffffff"
-                    app:chipStrokeColor="#2e7d32"
-                    app:chipStrokeWidth="1dp"
-                    app:chipCornerRadius="20dp"
-                    android:clickable="true"
-                    android:focusable="true" />
-            </com.google.android.material.chip.ChipGroup>
-        </HorizontalScrollView>
-
-        <!-- Today's summary card -->
+        <!-- ============ 页头 ============ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@drawable/bg_summary_gradient"
-            android:layout_marginStart="12dp"
-            android:layout_marginEnd="12dp"
-            android:layout_marginTop="8dp"
-            android:padding="16dp">
-
-            <!-- 汇总标题：下拉选择范围 -->
-            <TextView
-                android:id="@+id/tvSummaryTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="今日汇总 ▼"
-                android:textColor="#ffffff"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
-                android:paddingStart="4dp"
-                android:paddingEnd="4dp"
-                android:layout_marginBottom="10dp" />
+            android:background="@drawable/bg_header"
+            android:paddingStart="20dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="16dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="买卖记录"
+                    android:textColor="@color/white"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.01" />
+
+                <ImageView
+                    android:id="@+id/ivSearch"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_search"
+                    android:contentDescription="搜索"
+                    android:background="@drawable/bg_header_icon"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:tint="@color/white" />
+
+                <ImageView
+                    android:id="@+id/ivSort"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="8dp"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_sort"
+                    android:contentDescription="排序"
+                    android:background="@drawable/bg_header_icon"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:tint="@color/white" />
+
+                <TextView
+                    android:id="@+id/btnBatchManage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="8dp"
+                    android:text="管理"
+                    android:textColor="@color/white"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/bg_header_icon"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
+
+            <!-- 批量操作条：正常模式下三个控件全部 gone，高度自动为 0 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/tvSelectedCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textColor="@color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/btnSelectAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginTop="8dp"
+                    android:text="全选"
+                    android:textColor="@color/white"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/bg_header_icon"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/btnBatchDelete"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="8dp"
+                    android:text="批量删除"
+                    android:textColor="#FFCDD2"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/bg_header_icon"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ============ 筛选 chips ============ -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:background="@color/bg_page"
+            android:paddingTop="10dp"
+            android:paddingBottom="2dp">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupFilter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                app:chipSpacingHorizontal="8dp"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipAll"
+                    style="@style/Widget.FarmTrade.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="全部" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipBuy"
+                    style="@style/Widget.FarmTrade.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="买入" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipSell"
+                    style="@style/Widget.FarmTrade.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="卖出" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipDateFilter"
+                    style="@style/Widget.FarmTrade.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="false"
+                    android:text="全部时间 ▼" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+
+        <!-- ============ 汇总卡 ============ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"
+            android:background="@drawable/bg_summary_gradient"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="16dp">
+
+            <TextView
+                android:id="@+id/tvSummaryTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="今日汇总 ▼"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="12dp"
                 android:weightSum="3">
 
                 <LinearLayout
@@ -217,82 +228,112 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical"
-                    android:gravity="center">
+                    android:gravity="center_horizontal">
 
                     <TextView
                         android:id="@+id/tvBuyLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="今日买入"
-                        android:textColor="#c8e6c9"
-                        android:textSize="14sp" />
+                        android:textColor="#C8E6C9"
+                        android:textSize="12sp" />
 
                     <TextView
                         android:id="@+id/tvTodayBuy"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="￥0"
-                        android:textColor="#ffffff"
-                        android:textSize="20sp"
+                        android:textColor="@color/white"
+                        android:textSize="19sp"
                         android:textStyle="bold"
                         android:layout_marginTop="4dp" />
                 </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="#26FFFFFF" />
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical"
-                    android:gravity="center">
+                    android:gravity="center_horizontal">
 
                     <TextView
                         android:id="@+id/tvSellLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="今日卖出"
-                        android:textColor="#c8e6c9"
-                        android:textSize="14sp" />
+                        android:textColor="#C8E6C9"
+                        android:textSize="12sp" />
 
                     <TextView
                         android:id="@+id/tvTodaySell"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="￥0"
-                        android:textColor="#ffffff"
-                        android:textSize="20sp"
+                        android:textColor="@color/white"
+                        android:textSize="19sp"
                         android:textStyle="bold"
                         android:layout_marginTop="4dp" />
                 </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="#26FFFFFF" />
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical"
-                    android:gravity="center">
+                    android:gravity="center_horizontal">
 
                     <TextView
                         android:id="@+id/tvNetLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="净额"
-                        android:textColor="#c8e6c9"
-                        android:textSize="14sp" />
+                        android:textColor="#C8E6C9"
+                        android:textSize="12sp" />
 
                     <TextView
                         android:id="@+id/tvTodayNet"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="￥0"
-                        android:textColor="#ffffff"
-                        android:textSize="20sp"
+                        android:textColor="@color/white"
+                        android:textSize="19sp"
                         android:textStyle="bold"
                         android:layout_marginTop="4dp" />
                 </LinearLayout>
             </LinearLayout>
+
+            <!-- 按货物类型的金额明细（横向滚动） -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#26FFFFFF"
+                android:layout_marginTop="14dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/llTypeSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
         </LinearLayout>
 
-        <!-- RecyclerView for record list -->
+        <!-- ============ 记录列表 ============ -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvRecordList"
             android:layout_width="match_parent"
@@ -300,12 +341,12 @@
             android:layout_weight="1"
             android:clipToPadding="false"
             android:paddingTop="8dp"
-            android:paddingBottom="20dp"
-            android:scrollbars="vertical"
+            android:paddingBottom="96dp"
+            android:scrollbars="none"
             tools:listitem="@layout/item_record" />
     </LinearLayout>
 
-    <!-- Floating action button -->
+    <!-- ============ 新增按钮 ============ -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabAdd"
         android:layout_width="wrap_content"
@@ -313,11 +354,11 @@
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="20dp"
         android:layout_marginBottom="20dp"
-        android:src="@android:drawable/ic_input_add"
         android:contentDescription="添加记录"
-        app:backgroundTint="#2e7d32"
-        app:tint="#ffffff"
-        app:elevation="8dp"
-        app:fabSize="normal" />
+        android:src="@drawable/ic_add"
+        app:backgroundTint="@color/green_primary"
+        app:elevation="6dp"
+        app:fabSize="normal"
+        app:tint="@color/white" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

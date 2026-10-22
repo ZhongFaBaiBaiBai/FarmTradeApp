@@ -2,53 +2,52 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginTop="4dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingTop="18dp"
-    android:paddingBottom="18dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="12dp"
     android:paddingStart="16dp"
     android:paddingEnd="16dp"
     android:clickable="true"
     android:focusable="true"
-    android:foreground="?android:attr/selectableItemBackground"
-    android:background="#ffffff">
+    android:foreground="?attr/selectableItemBackground"
+    android:background="@color/surface">
 
-    <!-- 折叠箭头（默认隐藏，动态显示） -->
     <TextView
         android:id="@+id/ivArrow"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
         android:text="▼"
-        android:textSize="14sp"
-        android:textColor="#2e7d32"
+        android:textSize="12sp"
+        android:textColor="@color/green_primary"
         android:gravity="center"
         android:visibility="gone" />
 
-    <!-- 组名（日期/类型/单价） -->
     <TextView
         android:id="@+id/tvGroupName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textColor="#2e7d32"
-        android:textSize="20sp"
+        android:textColor="@color/green_primary"
+        android:textSize="19sp"
         android:textStyle="bold" />
 
-    <!-- 条数 -->
     <TextView
         android:id="@+id/tvCount"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="#666666"
-        android:textSize="15sp"
-        android:layout_marginEnd="14dp" />
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        android:layout_marginEnd="12dp" />
 
-    <!-- 金额小计 -->
     <TextView
         android:id="@+id/tvSubtotal"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="#1b5e20"
-        android:textSize="20sp"
+        android:textColor="@color/green_primary_dark"
+        android:textSize="19sp"
         android:textStyle="bold" />
 </LinearLayout>

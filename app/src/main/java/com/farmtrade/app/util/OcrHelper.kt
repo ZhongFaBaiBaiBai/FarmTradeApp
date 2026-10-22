@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.net.Uri
+import android.util.Log
 import android.os.Build
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
@@ -45,10 +46,13 @@ object OcrHelper {
         // 相机原图可达上千万像素，先降采样到最大边 1600（OCR 不需要更高分辨率，
         // 否则后续 3x 放大管线会 OOM 闪退）；返回的工作图由本函数负责回收
         val src = downscaleForOcr(bitmap)
+        Log.d("OcrHelper", "单数字识别开始: ${src.width}x${src.height}")
         try {
             // —— 策略 1：先直接交给 ML Kit（正常文本/记录本场景快速成功）
             val r1 = runMlKit(src)
+            Log.d("OcrHelper", "数字 Pass1 文本: " + (r1?.text?.replace("\n", " | ")?.take(240) ?: "null"))
             val n1 = pickLargestNumber(r1)
+            Log.d("OcrHelper", "数字 Pass1 取值: " + (n1 ?: "null"))
             if (n1 != null) return n1
 
             // —— 策略 2：LED 预处理管线 → ML Kit
@@ -121,10 +125,14 @@ object OcrHelper {
         // 不再"第一个 pass 出结果就返回"——手写识别可能把 2150 截断成 50，
         // 而是把所有 pass 的候选算式都收集起来，最后做去重/去碎片，选最可信的结果。
         val src = downscaleForOcr(bitmap)
+        Log.d("OcrHelper", "记录本识别开始: ${src.width}x${src.height}")
         val candidates = LinkedHashMap<String, LedgerRow>()
         try {
             // Pass 1: 原图直接识别
-            runMlKit(src).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+            runMlKit(src).let { t ->
+                Log.d("OcrHelper", "Ledger Pass1 文本: " + (t?.text?.replace("\n", " | ")?.take(240) ?: "null"))
+                extractLedgerRows(t)
+            }.forEach { candidates[keyOf(it)] = it }
 
             // Pass 2: 纸张裁剪 + 放大
             val scaled = cropAndScalePaper(src)
@@ -134,7 +142,10 @@ object OcrHelper {
                 // Pass 3: 灰度对比度增强
                 val enhanced = enhanceGrayscaleContrast(scaled)
                 try {
-                    runMlKit(enhanced).let { extractLedgerRows(it) }.forEach { candidates[keyOf(it)] = it }
+                    runMlKit(enhanced).let { t ->
+                        Log.d("OcrHelper", "Ledger Pass3 文本: " + (t?.text?.replace("\n", " | ")?.take(240) ?: "null"))
+                        extractLedgerRows(t)
+                    }.forEach { candidates[keyOf(it)] = it }
 
                     // Pass 4: Otsu 二值化
                     val binary = binarizeOtsu(enhanced)
@@ -239,6 +250,7 @@ object OcrHelper {
      */
     suspend fun recognizeWeighingSlip(bitmap: Bitmap): WeighingSlip? {
         val src = downscaleForOcr(bitmap)
+        Log.d("OcrHelper", "过磅单识别开始: ${src.width}x${src.height}")
         try {
             // Pass 1: 原图直接识别
             runMlKit(src)?.let { extractWeighingSlip(it) }?.let { if (it != null) return it }
@@ -293,7 +305,15 @@ object OcrHelper {
 
         // 关键：过磅单是"标签列 | 数值列 | 单位列"三列布局，ML Kit 常把三列拆成不同
         // 文本块（如"皮重："一行、"814"另一行），必须先按 Y 坐标合并成视觉行再匹配
-        for (norm in buildLogicalLines(visionText)) {
+        val logicalLines = buildLogicalLines(visionText)
+
+        // 整张单据的主导单位：过磅单基本都是公斤，个别行把"公斤"漏认成"斤"会导致误除以 2。
+        // 只要"公斤/kg"出现的行数不少于纯"斤"的行数，就整单按公斤处理。
+        val kgLines = logicalLines.count { it.contains("公斤") || it.lowercase().contains("kg") }
+        val jinLines = logicalLines.count { it.contains("斤") && !it.contains("公斤") }
+        val forceKg = kgLines >= jinLines
+
+        for (norm in logicalLines) {
             if (norm.isBlank()) continue
 
                 // 1) 过磅时间
@@ -317,14 +337,14 @@ object OcrHelper {
 
                 // 3) 重量字段（从各自关键词后面取第一个数字，支持一行多字段合并）
                 if (norm.contains("毛重") && gross <= 0.0) {
-                    numAfter(norm, "毛重")?.let { gross = toKg(norm, it) }
+                    numAfter(norm, "毛重")?.let { gross = toKg(norm, it, forceKg) }
                 }
                 if (tare <= 0.0 && (norm.contains("皮重") || norm.contains("车重"))) {
-                    numAfter(norm, "皮重")?.let { tare = toKg(norm, it) }
-                        ?: numAfter(norm, "车重")?.let { tare = toKg(norm, it) }
+                    numAfter(norm, "皮重")?.let { tare = toKg(norm, it, forceKg) }
+                        ?: numAfter(norm, "车重")?.let { tare = toKg(norm, it, forceKg) }
                 }
                 if (norm.contains("净重") && net <= 0.0) {
-                    numAfter(norm, "净重")?.let { net = toKg(norm, it) }
+                    numAfter(norm, "净重")?.let { net = toKg(norm, it, forceKg) }
                 }
 
             // 4) 单价（元/斤，不换算）
@@ -337,6 +357,15 @@ object OcrHelper {
         if (gross <= 0.0) return null
         // 皮重缺失时用净重兜底推算
         if (tare <= 0.0 && net > 0.0) tare = gross - net
+        // 皮重与净重交叉校验：单据必然满足 毛重 - 皮重 = 净重。
+        // 两者矛盾（常见原因：某行"公斤"漏认成"斤"被误除以 2）时，以净重反推的皮重为准。
+        if (tare > 0.0 && net > 0.0 && gross > net) {
+            val impliedTare = gross - net
+            if (impliedTare > 0 && Math.abs(impliedTare - tare) > tare * 0.05) {
+                Log.d("OcrHelper", "皮重与净重矛盾: tare=$tare net=$net → 修正为 $impliedTare")
+                tare = impliedTare
+            }
+        }
         if (tare <= 0.0 || gross <= tare) return null
         // 合理性：地磅毛重≥100kg、皮重≥50kg，毛重 < 100 吨
         if (gross < 100.0 || tare < 50.0 || gross > 100000) return null
@@ -351,8 +380,12 @@ object OcrHelper {
         return plainNumberRegex.find(norm, idx + label.length)?.value?.toDoubleOrNull()
     }
 
-    /** 按行内单位换算为公斤：公斤/kg 原值；纯"斤"÷2；无单位默认公斤 */
-    private fun toKg(norm: String, value: Double): Double {
+    /**
+     * 按行内单位换算为公斤：公斤/kg 原值；纯"斤"÷2；无单位默认公斤。
+     * [forceKg] 为整单主导单位判断结果，避免个别行漏认"公"字被误当成"斤"除以 2。
+     */
+    private fun toKg(norm: String, value: Double, forceKg: Boolean = false): Double {
+        if (forceKg) return value
         val lower = norm.lowercase()
         return when {
             lower.contains("公斤") || lower.contains("kg") -> value

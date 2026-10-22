@@ -26,7 +26,6 @@ object QuickRecordEditDialogs {
         fun getAllTypes(): List<String>
         fun recalcAndRender()
         fun toast(msg: String)
-        fun startVoiceEditForType()
         fun activity(): AppCompatActivity
     }
 
@@ -61,9 +60,8 @@ object QuickRecordEditDialogs {
         val dialog = MaterialAlertDialogBuilder(ctx).setView(dv.root).create()
         dv.tvFieldLabel.text = "选择计量方式"
         dv.tvHint.text = "改变计量方式后单位名称会同步调整，请核对数值"
-        dv.etInput.visibility = View.GONE
+        (dv.etInput.parent as? View)?.visibility = View.GONE
         dv.btnRetakePhoto.visibility = View.GONE
-        dv.btnVoiceEdit.visibility = View.GONE
 
         val modeButtons = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -132,7 +130,7 @@ object QuickRecordEditDialogs {
         val dialog = MaterialAlertDialogBuilder(ctx).setView(dv.root).create()
         dv.tvFieldLabel.text = "选择或编辑类型"
         dv.tvHint.text = "从已用类型中选择，或点击「自定义…」输入新的名称"
-        dv.etInput.visibility = View.GONE
+        (dv.etInput.parent as? View)?.visibility = View.GONE
         dv.btnRetakePhoto.visibility = View.GONE
 
         val chipGroup = ChipGroup(ctx).apply {
@@ -156,10 +154,6 @@ object QuickRecordEditDialogs {
         }
         (dv.root as LinearLayout).addView(chipGroup, 1)
 
-        dv.btnVoiceEdit.setOnClickListener {
-            dialog.dismiss()
-            host.startVoiceEditForType()
-        }
         dv.btnRestore.setOnClickListener {
             host.carryOverRecord?.type?.let { host.pendingRecord.type = it }
             host.recalcAndRender()
@@ -175,7 +169,7 @@ object QuickRecordEditDialogs {
                 .setView(dv2.root)
                 .setNegativeButton("取消", null)
                 .setPositiveButton("确定") { _, _ ->
-                    val v = dv2.etTypeName.text.toString().trim()
+                    val v = dv2.etTypeName.text?.toString().orEmpty().trim()
                     if (v.isNotBlank()) {
                         host.pendingRecord.type = v
                         host.recalcAndRender()

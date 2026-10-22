@@ -3,12 +3,16 @@ package com.farmtrade.app.ui
 import android.app.Activity
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.farmtrade.app.R
@@ -64,6 +68,26 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
     /** 排序模式 */
     private var sortMode: Int = SORT_TIME_DESC
+
+    /** 从相册选图时，是否走「记录本批量」流程 */
+    private var pickImageForLedger = false
+
+    /** 相册选图：把选中的图片直接交给 QuickRecordActivity 做 OCR */
+    private val pickImageLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val intent = Intent(requireContext(), QuickRecordActivity::class.java).apply {
+                putExtra(QuickRecordActivity.EXTRA_IMAGE_URI, uri)
+                putExtra(
+                    EXTRA_RECORD_MODE,
+                    if (pickImageForLedger) QuickRecordActivity.EXTRA_MODE_LEDGER else Record.SOURCE_PHOTO
+                )
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivityForResult(intent, REQ_QUICK_RECORD)
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -488,6 +512,51 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         binding.tvTodayBuy.text = "￥${Record.formatMoney(buyTotal)}"
         binding.tvTodaySell.text = "￥${Record.formatMoney(sellTotal)}"
         binding.tvTodayNet.text = "￥${Record.formatMoney(net)}"
+
+        updateTypeSummary(records)
+    }
+
+    /** 汇总卡里的按类型金额（横向滚动的胶囊） */
+    private fun updateTypeSummary(records: List<Record>) {
+        val container = binding.llTypeSummary
+        container.removeAllViews()
+        val ctx = requireContext()
+
+        if (records.isEmpty()) {
+            container.addView(whitePill("本期暂无记录"))
+            return
+        }
+        records.groupBy { it.type.ifBlank { "未分类" } }
+            .mapValues { (_, list) -> list.sumOf { it.totalAmount } }
+            .toList()
+            .sortedByDescending { it.second }
+            .forEach { (type, amount) ->
+                container.addView(whitePill("$type ￥${Record.formatMoney(amount)}"))
+            }
+    }
+
+    /** 渐变卡上的半透明白胶囊 */
+    private fun whitePill(text: String): TextView {
+        val ctx = requireContext()
+        return TextView(ctx).apply {
+            this.text = text
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(ctx, R.color.white))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20 * resources.displayMetrics.density
+                setColor(0x33FFFFFF)
+            }
+            val h = (10 * resources.displayMetrics.density).toInt()
+            val v = (5 * resources.displayMetrics.density).toInt()
+            setPadding(h, v, h, v)
+            val lp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.marginEnd = (6 * resources.displayMetrics.density).toInt()
+            layoutParams = lp
+        }
     }
 
     // ==================== 快速添加底部弹窗 ====================
@@ -500,10 +569,6 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         sheetBinding.btnPhotoRecord.setOnClickListener {
             dialog.dismiss()
             startQuickRecord(Record.SOURCE_PHOTO)
-        }
-        sheetBinding.btnVoiceRecord.setOnClickListener {
-            dialog.dismiss()
-            startQuickRecord(Record.SOURCE_VOICE)
         }
         sheetBinding.btnLedgerRecord.setOnClickListener {
             dialog.dismiss()
@@ -521,6 +586,16 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
                 Intent(requireContext(), AddRecordActivity::class.java),
                 REQ_ADD_RECORD
             )
+        }
+        sheetBinding.btnPickPhoto.setOnClickListener {
+            dialog.dismiss()
+            pickImageForLedger = false
+            pickImageLauncher.launch("image/*")
+        }
+        sheetBinding.btnPickLedger.setOnClickListener {
+            dialog.dismiss()
+            pickImageForLedger = true
+            pickImageLauncher.launch("image/*")
         }
         sheetBinding.btnCancel.setOnClickListener { dialog.dismiss() }
 

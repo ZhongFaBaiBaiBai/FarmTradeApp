@@ -1,34 +1,34 @@
 package com.farmtrade.app.ui
 
-import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.farmtrade.app.R
 import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.FragmentChartBinding
-import com.github.mikephil.charting.charts.HorizontalBarChart
-import com.github.mikephil.charting.charts.LineChart
-import com.github.mikephil.charting.components.Legend
-import com.github.mikephil.charting.components.XAxis
-import com.github.mikephil.charting.data.BarData
-import com.github.mikephil.charting.data.BarDataSet
-import com.github.mikephil.charting.data.BarEntry
-import com.github.mikephil.charting.data.Entry
-import com.github.mikephil.charting.data.LineData
-import com.github.mikephil.charting.data.LineDataSet
-import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
-import com.github.mikephil.charting.formatter.ValueFormatter
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Calendar
 
 /**
- * 数据图表 Fragment。
+ * 数据统计 Fragment —— 纯「文字 + 数字」呈现，不再画图。
+ *
+ * - 周期切换：日 / 月 / 季 / 年
+ * - 日期前后翻页
+ * - 统计范围：全部记录 / 拍照识别 / 手动录入（可按来源剔除）
+ * - 本期合计：笔数、合计金额、净重
+ * - 按货物类型明细：每类的笔数与金额
+ * - 按时间明细：每个有记录的时间点/月份的笔数与金额
  */
 class ChartFragment : Fragment() {
 
@@ -38,10 +38,10 @@ class ChartFragment : Fragment() {
     private val binding get() = _binding!!
 
     private lateinit var dbHelper: DatabaseHelper
-    private lateinit var lineChart: LineChart
-    private lateinit var barChart: HorizontalBarChart
 
     private var periodMode = PeriodMode.MONTH
+    /** 货物类型筛选；null = 全部 */
+    private var typeFilter: String? = null
     private val selCal: Calendar = Calendar.getInstance()
 
     override fun onCreateView(
@@ -56,10 +56,12 @@ class ChartFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         dbHelper = DatabaseHelper(requireContext())
-        initCharts()
         setupToggle()
         setupPeriodSelector()
-        binding.togglePeriod.check(R.id.btnPeriodMonth)
+        setupDatePicker()
+        setupTypeFilter()
+        binding.togglePeriod.check(binding.btnPeriodMonth.id)
+        refresh()
     }
 
     override fun onDestroyView() {
@@ -67,53 +69,7 @@ class ChartFragment : Fragment() {
         _binding = null
     }
 
-    // ==================== 图表初始化 ====================
-
-    private fun initCharts() {
-        lineChart = LineChart(requireContext()).apply {
-            description.isEnabled = false
-            legend.apply {
-                verticalAlignment = Legend.LegendVerticalAlignment.BOTTOM
-                horizontalAlignment = Legend.LegendHorizontalAlignment.CENTER
-                orientation = Legend.LegendOrientation.HORIZONTAL
-                setDrawInside(false)
-                textSize = 13f
-            }
-            xAxis.apply {
-                position = XAxis.XAxisPosition.BOTTOM
-                granularity = 1f
-                setDrawGridLines(false)
-                textSize = 11f
-            }
-            axisLeft.apply {
-                axisMinimum = 0f
-                textSize = 11f
-            }
-            axisRight.isEnabled = false
-            setTouchEnabled(true)
-            setPinchZoom(true)
-            isDoubleTapToZoomEnabled = true
-            setNoDataText("暂无数据")
-        }
-        replaceView(binding.frameLineChart, lineChart)
-
-        barChart = HorizontalBarChart(requireContext()).apply {
-            description.isEnabled = false
-            legend.isEnabled = false
-            xAxis.apply {
-                position = XAxis.XAxisPosition.BOTTOM
-                granularity = 1f
-                setDrawGridLines(false)
-                textSize = 11f
-            }
-            axisLeft.axisMinimum = 0f
-            axisRight.axisMinimum = 0f
-            setFitBars(true)
-        }
-        replaceView(binding.frameBarChart, barChart)
-    }
-
-    // ==================== 周期切换 ====================
+    // ==================== 交互 ====================
 
     private fun setupToggle() {
         binding.togglePeriod.addOnButtonCheckedListener { _, checkedId, isChecked ->
@@ -126,13 +82,94 @@ class ChartFragment : Fragment() {
                 else -> return@addOnButtonCheckedListener
             }
             resetSelectionToNow()
-            refresh()
         }
     }
 
     private fun setupPeriodSelector() {
         binding.btnPrev.setOnClickListener { shiftPeriod(-1) }
         binding.btnNext.setOnClickListener { shiftPeriod(1) }
+    }
+
+    /**
+     * 点日期文字弹出「有记录的期间」列表直接跳转：
+     * - 日视图列出有记录的日期
+     * - 月/季视图列出有记录的月份（不让你去点具体哪一天）
+     * - 年视图列出有记录的年份
+     */
+    private fun setupDatePicker() {
+        binding.tvPeriodLabel.setOnClickListener { showPeriodPicker() }
+    }
+
+    private fun showPeriodPicker() {
+        val all = dbHelper.getAllRecords()
+        val keys: List<String> = when (periodMode) {
+            PeriodMode.DAY -> all.map { it.dateTime.take(10) }.distinct().sortedDescending()
+            PeriodMode.MONTH, PeriodMode.QUARTER -> all.map { it.dateTime.take(7) }.distinct().sortedDescending()
+            PeriodMode.YEAR -> all.map { it.dateTime.take(4) }.distinct().sortedDescending()
+        }
+        if (keys.isEmpty()) {
+            Toast.makeText(requireContext(), "还没有任何记录", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val labels = keys.map { formatPeriodOption(it) }.toTypedArray()
+        val title = when (periodMode) {
+            PeriodMode.DAY -> "选择日期（只列出有记录的）"
+            PeriodMode.MONTH, PeriodMode.QUARTER -> "选择月份（只列出有记录的）"
+            PeriodMode.YEAR -> "选择年份（只列出有记录的）"
+        }
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(title)
+            .setItems(labels) { _, which ->
+                val key = keys[which]
+                when (periodMode) {
+                    PeriodMode.DAY -> {
+                        val p = key.split("-")
+                        selCal.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt())
+                    }
+                    PeriodMode.MONTH, PeriodMode.QUARTER -> {
+                        val p = key.split("-")
+                        selCal.set(p[0].toInt(), p[1].toInt() - 1, 1)
+                    }
+                    PeriodMode.YEAR -> selCal.set(key.toInt(), 0, 1)
+                }
+                refresh()
+            }
+            .show()
+    }
+
+    private fun formatPeriodOption(key: String): String = when (periodMode) {
+        PeriodMode.DAY -> key
+        PeriodMode.MONTH, PeriodMode.QUARTER -> {
+            val p = key.split("-")
+            (p.getOrNull(0) ?: key) + "年" + (p.getOrNull(1)?.toIntOrNull() ?: "") + "月"
+        }
+        PeriodMode.YEAR -> key + "年"
+    }
+
+    /** 按货物类型筛选：全部 + 数据库里的所有类型 */
+    private fun setupTypeFilter() {
+        val group = binding.chipGroupTypeFilter
+        group.removeAllViews()
+        val types = mutableListOf("全部")
+        types.addAll(dbHelper.getAllTypes().filter { it.isNotBlank() })
+
+        types.forEachIndexed { index, name ->
+            val chip = Chip(requireContext()).apply {
+                text = name
+                isCheckable = true
+                isChecked = index == 0
+                textSize = 14f
+            }
+            group.addView(chip)
+        }
+        group.setOnCheckedStateChangeListener { g, checkedIds ->
+            if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
+            val chip = g.findViewById<Chip>(checkedIds[0]) ?: return@setOnCheckedStateChangeListener
+            typeFilter = if (chip.text.toString() == "全部") null else chip.text.toString()
+            refresh()
+        }
     }
 
     private fun shiftPeriod(direction: Int) {
@@ -146,217 +183,194 @@ class ChartFragment : Fragment() {
     }
 
     private fun resetSelectionToNow() {
-        selCal.timeInMillis = System.currentTimeMillis()
+        val now = Calendar.getInstance()
+        selCal.set(now.get(Calendar.YEAR), now.get(Calendar.MONTH), now.get(Calendar.DAY_OF_MONTH))
+        refresh()
     }
 
-    // ==================== 刷新 ====================
+    // ==================== 渲染 ====================
 
     private fun refresh() {
         updateLabel()
-        val keys = getRangeKeys()
-        val records = loadRangeRecords(keys)
-        updateLineChart(records, keys)
-        updateBarChart(records)
+        var records = loadRangeRecords()
+        typeFilter?.let { t -> records = records.filter { it.type == t } }
+        records = records.sortedBy { it.dateTime }
+        updateOverview(records)
+        updateTypeTable(records)
+        updatePeriodTable(records)
     }
 
     private fun updateLabel() {
         val y = selCal.get(Calendar.YEAR)
         val m = selCal.get(Calendar.MONTH) + 1
         val d = selCal.get(Calendar.DAY_OF_MONTH)
-        binding.tvPeriodLabel.text = when (periodMode) {
+        val label = when (periodMode) {
             PeriodMode.DAY -> String.format("%d年%d月%d日", y, m, d)
             PeriodMode.MONTH -> String.format("%d年%d月", y, m)
             PeriodMode.QUARTER -> String.format("%d年Q%d", y, quarterOf(m))
             PeriodMode.YEAR -> String.format("%d年", y)
         }
+        binding.tvPeriodLabel.text = label + " ▼"
     }
 
-    private fun loadRangeRecords(keys: List<String>): List<Record> {
+    private fun loadRangeRecords(): List<Record> {
         val y = selCal.get(Calendar.YEAR)
         val m = selCal.get(Calendar.MONTH) + 1
         return when (periodMode) {
-            PeriodMode.DAY -> keys.flatMap { dbHelper.getRecordsByDate(it) }
+            PeriodMode.DAY -> {
+                // 日视图给最近 7 天，方便对比
+                val list = mutableListOf<Record>()
+                for (i in 6 downTo 0) {
+                    val c = (selCal.clone() as Calendar)
+                    c.add(Calendar.DAY_OF_YEAR, -i)
+                    list.addAll(dbHelper.getRecordsByDate(formatDateKey(c)))
+                }
+                list
+            }
             PeriodMode.MONTH -> dbHelper.getRecordsByMonth(y, m)
             PeriodMode.QUARTER -> dbHelper.getRecordsByQuarter(y, quarterOf(m))
             PeriodMode.YEAR -> dbHelper.getRecordsByYear(y)
         }
     }
 
-    private fun getRangeKeys(): List<String> {
-        val y = selCal.get(Calendar.YEAR)
-        val m = selCal.get(Calendar.MONTH) + 1
-        return when (periodMode) {
-            PeriodMode.DAY -> {
-                val list = mutableListOf<String>()
-                for (i in 6 downTo 0) {
-                    val c = (selCal.clone() as Calendar)
-                    c.add(Calendar.DAY_OF_YEAR, -i)
-                    list.add(formatDateKey(c))
-                }
-                list
-            }
-            PeriodMode.MONTH -> {
-                val days = daysInMonth(y, m)
-                (1..days).map { formatDateKey(y, m, it) }
-            }
-            PeriodMode.QUARTER -> {
-                val q = quarterOf(m)
-                val startMonth = (q - 1) * 3 + 1
-                val endMonth = startMonth + 2
-                val list = mutableListOf<String>()
-                for (mm in startMonth..endMonth) {
-                    val days = daysInMonth(y, mm)
-                    for (dd in 1..days) {
-                        list.add(formatDateKey(y, mm, dd))
-                    }
-                }
-                list
-            }
-            PeriodMode.YEAR -> (1..12).map { formatMonthKey(y, it) }
-        }
+    private fun updateOverview(records: List<Record>) {
+        binding.tvStatCount.text = records.size.toString()
+        binding.tvStatAmount.text = "￥" + Record.formatMoney(records.sumOf { it.totalAmount })
     }
 
-    // ==================== 折线图 ====================
+    /** 某批记录的净重合计，统一换算成「斤」 */
+    private fun netJinOf(records: List<Record>): Double = records
+        .filter { it.measureMode == Record.MODE_WEIGHT_KG || it.measureMode == Record.MODE_WEIGHT_JIN }
+        .sumOf { r ->
+            val net = r.grossWeight - r.vehicleWeight
+            if (r.measureMode == Record.MODE_WEIGHT_KG) net * 2 else net
+        }
 
-    private fun updateLineChart(records: List<Record>, keys: List<String>) {
+    private fun updateTypeTable(records: List<Record>) {
+        val container = binding.llTypeRows
+        container.removeAllViews()
         if (records.isEmpty()) {
-            showEmptyView(binding.frameLineChart)
+            binding.tvTypeEmpty.visibility = View.VISIBLE
             return
         }
-
-        val isMonthGranularity = periodMode == PeriodMode.YEAR
-        val buyByIndex = FloatArray(keys.size)
-        val sellByIndex = FloatArray(keys.size)
-        val keyToIndex = HashMap<String, Int>()
-        keys.forEachIndexed { i, k -> keyToIndex[k] = i }
-
-        for (r in records) {
-            val key = if (isMonthGranularity) r.dateTime.substring(0, 7) else r.dateTime.substring(0, 10)
-            val idx = keyToIndex[key] ?: continue
-            if (r.direction == "买入") {
-                buyByIndex[idx] += r.totalAmount.toFloat()
-            } else if (r.direction == "卖出") {
-                sellByIndex[idx] += r.totalAmount.toFloat()
+        binding.tvTypeEmpty.visibility = View.GONE
+        val green = ContextCompat.getColor(requireContext(), R.color.green_primary)
+        records.groupBy { it.type.ifBlank { "未分类" } }
+            .mapValues { (_, list) ->
+                Triple(list.sumOf { it.totalAmount }, list.size, netJinOf(list))
             }
-        }
-
-        val buyEntries = ArrayList<Entry>()
-        val sellEntries = ArrayList<Entry>()
-        for (i in keys.indices) {
-            buyEntries.add(Entry(i.toFloat(), buyByIndex[i]))
-            sellEntries.add(Entry(i.toFloat(), sellByIndex[i]))
-        }
-
-        val buySet = LineDataSet(buyEntries, "买入").apply {
-            setColor(GREEN)
-            setCircleColor(GREEN)
-            lineWidth = 2f
-            circleRadius = 3f
-            setDrawCircles(true)
-            setDrawValues(false)
-            mode = LineDataSet.Mode.CUBIC_BEZIER
-        }
-        val sellSet = LineDataSet(sellEntries, "卖出").apply {
-            setColor(ORANGE)
-            setCircleColor(ORANGE)
-            lineWidth = 2f
-            circleRadius = 3f
-            setDrawCircles(true)
-            setDrawValues(false)
-            enableDashedLine(10f, 6f, 0f)
-            mode = LineDataSet.Mode.CUBIC_BEZIER
-        }
-
-        lineChart.data = LineData(buySet, sellSet)
-        val labels = keys.map { formatXLabel(it, isMonthGranularity) }
-        lineChart.xAxis.valueFormatter = IndexAxisValueFormatter(labels)
-        lineChart.xAxis.setLabelCount(minOf(6, labels.size).coerceAtLeast(1), false)
-        lineChart.notifyDataSetChanged()
-        lineChart.invalidate()
-        replaceView(binding.frameLineChart, lineChart)
+            .toList()
+            .sortedByDescending { it.second.first }
+            .forEach { (type, info) ->
+                addTableRow(
+                    container,
+                    type,
+                    "${info.second} 笔",
+                    Record.formatNumber(info.third),
+                    "￥" + Record.formatMoney(info.first),
+                    green
+                )
+            }
     }
 
-    // ==================== 横向柱状图 ====================
-
-    private fun updateBarChart(records: List<Record>) {
+    private fun updatePeriodTable(records: List<Record>) {
+        val container = binding.llPeriodRows
+        container.removeAllViews()
         if (records.isEmpty()) {
-            showEmptyView(binding.frameBarChart)
+            binding.tvPeriodEmpty.visibility = View.VISIBLE
             return
         }
+        binding.tvPeriodEmpty.visibility = View.GONE
 
-        val typeTotals = LinkedHashMap<String, Double>()
-        var grandTotal = 0.0
-        for (r in records) {
-            typeTotals[r.type] = (typeTotals[r.type] ?: 0.0) + r.totalAmount
-            grandTotal += r.totalAmount
-        }
+        val byMonthGranularity = periodMode == PeriodMode.YEAR
+        val grouped = records.groupBy {
+            if (byMonthGranularity) it.dateTime.substring(0, 7) else it.dateTime.substring(0, 10)
+        }.toList().sortedBy { it.first }
 
-        val sorted = typeTotals.entries.sortedByDescending { it.value }
-        val entries = ArrayList<BarEntry>()
-        val labels = ArrayList<String>()
-        sorted.forEachIndexed { i, entry ->
-            val pct = if (grandTotal > 0) (entry.value / grandTotal * 100.0).toFloat() else 0f
-            entries.add(BarEntry(i.toFloat(), pct))
-            labels.add(entry.key)
-        }
-
-        val set = BarDataSet(entries, "类型占比").apply {
-            setColor(GREEN)
-            setValueTextSize(12f)
-            setDrawValues(true)
-            setValueFormatter(object : ValueFormatter() {
-                override fun getFormattedValue(value: Float): String =
-                    String.format("%.1f%%", value)
-            })
-        }
-
-        barChart.data = BarData(set).apply { setBarWidth(0.6f) }
-        barChart.xAxis.valueFormatter = IndexAxisValueFormatter(labels)
-        barChart.xAxis.setLabelCount(labels.size, true)
-        barChart.notifyDataSetChanged()
-        barChart.invalidate()
-        replaceView(binding.frameBarChart, barChart)
-    }
-
-    // ==================== 视图工具方法 ====================
-
-    private fun replaceView(frame: FrameLayout, chart: View) {
-        frame.removeAllViews()
-        frame.addView(
-            chart,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+        for ((key, list) in grouped) {
+            addTableRow(
+                container,
+                labelOfKey(key, byMonthGranularity),
+                "${list.size} 笔",
+                null,
+                "￥" + Record.formatMoney(list.sumOf { it.totalAmount })
             )
-        )
+        }
     }
 
-    private fun showEmptyView(frame: FrameLayout) {
-        frame.removeAllViews()
-        val tv = TextView(requireContext()).apply {
-            text = "暂无数据"
-            gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#aaaaaa"))
-            textSize = 16f
+    private fun labelOfKey(key: String, monthGranularity: Boolean): String {
+        return if (monthGranularity) {
+            val mm = key.substring(5, 7).toIntOrNull() ?: return key
+            "${mm}月"
+        } else {
+            val parts = key.split("-")
+            if (parts.size >= 3) {
+                "${parts[1].toIntOrNull() ?: parts[1]}/${parts[2].toIntOrNull() ?: parts[2]}"
+            } else key
         }
-        frame.addView(
-            tv,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        )
     }
+
+    /** 表格行：名称 | 笔数 | 净重 | 金额（净重传 null 时只渲染三列），末尾附一条分隔线 */
+    private fun addTableRow(
+        container: LinearLayout,
+        name: String,
+        count: String,
+        netWeight: String?,
+        amount: String,
+        amountColor: Int? = null
+    ) {
+        val ctx = requireContext()
+        val primary = ContextCompat.getColor(ctx, R.color.text_primary)
+        val secondary = ContextCompat.getColor(ctx, R.color.text_secondary)
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(0, dp(11f), 0, dp(11f))
+        }
+        if (netWeight != null) {
+            row.addView(cell(name, 1.0f, Gravity.START, color = primary))
+            row.addView(cell(count, 0.55f, Gravity.CENTER, color = secondary, size = 13f))
+            row.addView(cell(netWeight, 1.05f, Gravity.CENTER, color = secondary, size = 13f))
+            row.addView(cell(amount, 1.15f, Gravity.END, bold = true, size = 15f, color = amountColor ?: primary))
+        } else {
+            row.addView(cell(name, 1.3f, Gravity.START, color = primary))
+            row.addView(cell(count, 0.7f, Gravity.CENTER, color = secondary, size = 13f))
+            row.addView(cell(amount, 1.2f, Gravity.END, bold = true, size = 15f, color = amountColor ?: primary))
+        }
+        container.addView(row)
+
+        container.addView(View(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            setBackgroundColor(ContextCompat.getColor(ctx, R.color.divider))
+        })
+    }
+
+    private fun cell(
+        text: String,
+        weight: Float,
+        gravity: Int,
+        bold: Boolean = false,
+        size: Float = 15f,
+        color: Int
+    ): TextView = TextView(requireContext()).apply {
+        this.text = text
+        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight)
+        this.gravity = gravity
+        setTextColor(color)
+        textSize = size
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        if (bold) setTypeface(null, Typeface.BOLD)
+    }
+
+    private fun dp(v: Float): Int = (v * resources.displayMetrics.density).toInt()
 
     // ==================== 日期工具 ====================
 
     private fun quarterOf(month: Int): Int = (month - 1) / 3 + 1
-
-    private fun daysInMonth(year: Int, month: Int): Int {
-        val cal = Calendar.getInstance()
-        cal.set(year, month - 1, 1)
-        return cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-    }
 
     private fun formatDateKey(c: Calendar): String = String.format(
         "%04d-%02d-%02d",
@@ -364,29 +378,4 @@ class ChartFragment : Fragment() {
         c.get(Calendar.MONTH) + 1,
         c.get(Calendar.DAY_OF_MONTH)
     )
-
-    private fun formatDateKey(y: Int, m: Int, d: Int): String =
-        String.format("%04d-%02d-%02d", y, m, d)
-
-    private fun formatMonthKey(y: Int, m: Int): String =
-        String.format("%04d-%02d", y, m)
-
-    private fun formatXLabel(key: String, isMonthGranularity: Boolean): String {
-        return if (isMonthGranularity) {
-            val mm = key.substring(5, 7).toIntOrNull() ?: return key
-            "${mm}月"
-        } else {
-            val parts = key.split("-")
-            if (parts.size >= 3) {
-                "${parts[1].toIntOrNull() ?: parts[1]}/${parts[2].toIntOrNull() ?: parts[2]}"
-            } else {
-                key
-            }
-        }
-    }
-
-    companion object {
-        private val GREEN = Color.parseColor("#2e7d32")
-        private val ORANGE = Color.parseColor("#e65100")
-    }
 }

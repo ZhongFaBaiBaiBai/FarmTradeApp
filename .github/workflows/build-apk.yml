@@ -47,39 +47,27 @@ jobs:
     - name: 创建 local.properties
       run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-    - name: 缓存 debug keystore（保证每次构建签名一致，可覆盖安装）
-      uses: actions/cache@v4
-      with:
-        path: app/debug.keystore
-        key: android-debug-keystore-v1
-
     - name: 准备固定签名 keystore
       run: |
-        if [ ! -f app/debug.keystore ]; then
+        if [ -f app/debug.keystore ]; then
+          echo "✅ 使用仓库内置的 debug.keystore（签名固定，可直接覆盖安装）"
+          keytool -list -keystore app/debug.keystore -storepass android | head -5
+        else
           keytool -genkeypair -v \
             -keystore app/debug.keystore \
             -alias androiddebugkey \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
-          echo "✅ 生成了新的 debug.keystore（首次构建）"
-        else
-          echo "✅ debug.keystore 已存在（来自缓存）"
+          echo "⚠️ 仓库内没有 debug.keystore，已临时生成。请下载 debug-keystore artifact 并提交到 app/debug.keystore"
         fi
 
-    - name: 下载 Vosk 语音模型（打包进 APK）
-      run: |
-        MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip"
-        ASSETS_DIR="app/src/main/assets/vosk-model"
-        mkdir -p "$ASSETS_DIR"
-        echo "正在下载语音模型..."
-        wget -q "$MODEL_URL" -O /tmp/vosk-model.zip
-        echo "下载完成，正在解压..."
-        unzip -q /tmp/vosk-model.zip -d /tmp/vosk-tmp
-        # 去掉顶层目录，直接复制模型文件
-        cp -r /tmp/vosk-tmp/vosk-model-small-cn-0.22/* "$ASSETS_DIR/"
-        echo "模型已放入 assets 目录"
-        rm -rf /tmp/vosk-model.zip /tmp/vosk-tmp
+    - name: 上传 keystore（用于固化签名）
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-keystore
+        path: app/debug.keystore
+        retention-days: 7
 
     - name: 构建 Debug APK
       run: |

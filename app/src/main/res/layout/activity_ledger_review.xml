@@ -1,76 +1,81 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#f0f2f5">
+    android:background="@color/bg_page">
 
-    <!-- Top green header -->
+    <!-- 页头 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#2e7d32"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp">
+        android:background="@drawable/bg_header"
+        android:paddingStart="12dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="14dp">
 
         <ImageView
             android:id="@+id/ivBack"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@android:drawable/ic_media_previous"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_back"
             android:contentDescription="返回"
-            app:tint="#ffffff" />
+            android:background="@drawable/bg_header_icon"
+            android:clickable="true"
+            android:focusable="true"
+            app:tint="@color/white" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:layout_marginStart="12dp"
             android:text="记录本批量录入"
-            android:textColor="#ffffff"
+            android:textColor="@color/white"
             android:textSize="20sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:layout_marginStart="-32dp" />
+            android:textStyle="bold" />
     </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="16dp">
 
             <TextView
                 android:id="@+id/tvSummary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="共识别 0 条算式"
-                android:textColor="#e65100"
+                android:textColor="@color/green_primary"
                 android:textSize="15sp"
-                android:background="#fff3e0"
-                android:padding="12dp"
-                android:layout_marginBottom="10dp" />
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
 
-            <!-- 统一设置卡片：方向 / 类型 / 单位 / 单价 -->
+            <!-- 整批统一设置 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp"
-                app:strokeColor="#e8e8e8"
-                app:strokeWidth="1dp"
-                android:layout_marginBottom="12dp">
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="@dimen/radius_m"
+                app:cardElevation="1.5dp"
+                app:strokeColor="@color/divider"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -81,40 +86,48 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="整批统一设置（应用到全部记录）"
-                        android:textColor="#888888"
-                        android:textSize="13sp"
-                        android:layout_marginBottom="10dp" />
+                        android:text="整批统一设置"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
 
-                    <!-- 日期时间 -->
+                    <!-- 日期 -->
                     <LinearLayout
                         android:id="@+id/rowDateTime"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginBottom="10dp"
+                        android:background="@drawable/bg_input"
+                        android:padding="12dp"
                         android:clickable="true"
                         android:focusable="true"
-                        android:foreground="?android:attr/selectableItemBackground">
+                        android:layout_marginBottom="10dp">
+
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:src="@drawable/ic_calendar"
+                            android:contentDescription="日期"
+                            app:tint="@color/green_primary" />
 
                         <TextView
-                            android:layout_width="72dp"
-                            android:layout_height="wrap_content"
-                            android:text="日期"
-                            android:textColor="#888888"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/tvDateTime"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:layout_marginStart="10dp"
+                            android:text="日期"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tvDateTime"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:text="点此选择日期时间"
-                            android:textColor="#333333"
-                            android:textSize="16sp"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp" />
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp" />
                     </LinearLayout>
 
                     <!-- 方向 -->
@@ -126,37 +139,35 @@
                         android:layout_marginBottom="10dp">
 
                         <TextView
-                            android:layout_width="72dp"
+                            android:layout_width="64dp"
                             android:layout_height="wrap_content"
                             android:text="方向"
-                            android:textColor="#888888"
-                            android:textSize="16sp" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp" />
 
                         <com.google.android.material.button.MaterialButtonToggleGroup
                             android:id="@+id/toggleDirection"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            app:singleSelection="true"
-                            app:selectionRequired="true">
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnBuy"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                style="@style/Widget.FarmTrade.Button.Toggle"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
+                                android:layout_height="42dp"
                                 android:layout_weight="1"
-                                android:text="买入"
-                                android:textSize="15sp" />
+                                android:text="买入" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnSell"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                style="@style/Widget.FarmTrade.Button.Toggle"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
+                                android:layout_height="42dp"
                                 android:layout_weight="1"
-                                android:text="卖出"
-                                android:textSize="15sp" />
+                                android:text="卖出" />
                         </com.google.android.material.button.MaterialButtonToggleGroup>
                     </LinearLayout>
 
@@ -169,20 +180,27 @@
                         android:layout_marginBottom="10dp">
 
                         <TextView
-                            android:layout_width="72dp"
+                            android:layout_width="64dp"
                             android:layout_height="wrap_content"
                             android:text="类型"
-                            android:textColor="#888888"
-                            android:textSize="16sp" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp" />
 
-                        <EditText
-                            android:id="@+id/etLedgerType"
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.FarmTrade.TextInputLayout"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:inputType="text"
-                            android:hint="如：小麦"
-                            android:textSize="16sp" />
+                            android:hint="货物名称">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etLedgerType"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="text"
+                                android:maxLines="1"
+                                android:textSize="15sp" />
+                        </com.google.android.material.textfield.TextInputLayout>
                     </LinearLayout>
 
                     <!-- 单位 -->
@@ -194,37 +212,35 @@
                         android:layout_marginBottom="10dp">
 
                         <TextView
-                            android:layout_width="72dp"
+                            android:layout_width="64dp"
                             android:layout_height="wrap_content"
                             android:text="单位"
-                            android:textColor="#888888"
-                            android:textSize="16sp" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp" />
 
                         <com.google.android.material.button.MaterialButtonToggleGroup
                             android:id="@+id/toggleUnit"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            app:singleSelection="true"
-                            app:selectionRequired="true">
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnUnitKg"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                style="@style/Widget.FarmTrade.Button.Toggle"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
+                                android:layout_height="42dp"
                                 android:layout_weight="1"
-                                android:text="公斤"
-                                android:textSize="15sp" />
+                                android:text="公斤" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnUnitJin"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                style="@style/Widget.FarmTrade.Button.Toggle"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
+                                android:layout_height="42dp"
                                 android:layout_weight="1"
-                                android:text="斤"
-                                android:textSize="15sp" />
+                                android:text="斤" />
                         </com.google.android.material.button.MaterialButtonToggleGroup>
                     </LinearLayout>
 
@@ -236,52 +252,61 @@
                         android:gravity="center_vertical">
 
                         <TextView
-                            android:layout_width="72dp"
+                            android:layout_width="64dp"
                             android:layout_height="wrap_content"
                             android:text="单价"
-                            android:textColor="#888888"
-                            android:textSize="16sp" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp" />
 
-                        <EditText
-                            android:id="@+id/etLedgerPrice"
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.FarmTrade.TextInputLayout"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:inputType="numberDecimal"
-                            android:hint="元/斤，如 1.28"
-                            android:textSize="16sp" />
+                            android:hint="统一单价">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etLedgerPrice"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="numberDecimal"
+                                android:maxLines="1"
+                                android:textSize="15sp" />
+                        </com.google.android.material.textfield.TextInputLayout>
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 识别结果列表标题 + 添加行按钮 -->
+            <!-- 记录列表标题 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="6dp">
+                android:layout_marginBottom="10dp">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="记录列表（每行一条，可改数字或删除）"
-                    android:textColor="#666666"
+                    android:text="记录列表（可改数字或删除）"
+                    android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnAddRow"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.FarmTrade.Button.Text"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
                     android:text="+ 添加一行"
-                    android:textColor="#00695c"
-                    android:textSize="13sp"
-                    app:strokeColor="#00695c"
-                    app:cornerRadius="8dp" />
+                    android:textColor="@color/green_primary"
+                    android:textSize="14sp" />
             </LinearLayout>
 
+            <!-- 动态行容器 -->
             <LinearLayout
                 android:id="@+id/llRows"
                 android:layout_width="match_parent"
@@ -290,15 +315,23 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- 底部保存按钮 -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnSaveAll"
+    <!-- 保存 -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_margin="12dp"
-        android:text="保存全部记录"
-        android:textColor="#ffffff"
-        android:textSize="18sp"
-        app:backgroundTint="#2e7d32"
-        app:cornerRadius="12dp" />
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/surface"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp"
+        android:elevation="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveAll"
+            style="@style/Widget.FarmTrade.Button"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="保存全部记录" />
+    </LinearLayout>
 </LinearLayout>

@@ -12,10 +12,17 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
 
     companion object {
         private const val DB_NAME = "farm_trade.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
 
         private const val TABLE_RECORDS = "records"
         private const val TABLE_CUSTOM_TYPES = "custom_types"
+        private const val TABLE_PHOTO_NOTES = "photo_notes"
+
+        // photo_notes 表字段（图片注释 / 纯文字笔记）
+        private const val COL_PN_ID = "id"
+        private const val COL_PN_FILE = "file_name"
+        private const val COL_PN_NOTE = "note"
+        private const val COL_PN_CREATED = "created_at"
 
         // records表字段
         private const val COL_ID = "id"
@@ -74,12 +81,30 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
             val cv = ContentValues().apply { put(COL_TYPE_NAME, type) }
             db.insert(TABLE_CUSTOM_TYPES, null, cv)
         }
+
+        createPhotoNotesTable(db)
     }
 
+    /** 图片注释 / 纯文字笔记表 */
+    private fun createPhotoNotesTable(db: SQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS $TABLE_PHOTO_NOTES (
+                $COL_PN_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_PN_FILE TEXT,
+                $COL_PN_NOTE TEXT NOT NULL,
+                $COL_PN_CREATED TEXT NOT NULL
+            )
+        """.trimIndent())
+    }
+
+    /**
+     * 增量升级：只补建新表，**绝不 DROP 已有表**。
+     * （旧实现是 DROP + onCreate，升级一次就会把用户全部记录清空）
+     */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_RECORDS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_CUSTOM_TYPES")
-        onCreate(db)
+        if (oldVersion < 2) {
+            createPhotoNotesTable(db)
+        }
     }
 
     // ==================== 记录操作 ====================
@@ -202,4 +227,70 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
     fun deleteCustomType(typeName: String) {
         writableDatabase.delete(TABLE_CUSTOM_TYPES, "$COL_TYPE_NAME = ?", arrayOf(typeName))
     }
+
+    // ==================== 图片注释 / 文字笔记 ====================
+
+    /** 新增或更新某张图片的注释；fileName 为 null 表示一条纯文字笔记 */
+    fun savePhotoNote(fileName: String?, note: String, createdAt: String): Long {
+        val db = writableDatabase
+        val trimmed = note.trim()
+        val existing = if (fileName != null) {
+            db.query(
+                TABLE_PHOTO_NOTES, arrayOf(COL_PN_ID),
+                "$COL_PN_FILE = ?", arrayOf(fileName), null, null, null
+            ).use { if (it.moveToFirst()) it.getLong(0) else -1L }
+        } else -1L
+
+        return if (existing > 0) {
+            val cv = ContentValues().apply {
+                put(COL_PN_NOTE, trimmed)
+                put(COL_PN_CREATED, createdAt)
+            }
+            db.update(TABLE_PHOTO_NOTES, cv, "$COL_PN_ID = ?", arrayOf(existing.toString()))
+            existing
+        } else {
+            val cv = ContentValues().apply {
+                put(COL_PN_FILE, fileName)
+                put(COL_PN_NOTE, trimmed)
+                put(COL_PN_CREATED, createdAt)
+            }
+            db.insert(TABLE_PHOTO_NOTES, null, cv)
+        }
+    }
+
+    /** 取某张图片的注释，没有返回 null */
+    fun getNoteForFile(fileName: String): String? {
+        readableDatabase.query(
+            TABLE_PHOTO_NOTES, arrayOf(COL_PN_NOTE),
+            "$COL_PN_FILE = ?", arrayOf(fileName), null, null, null
+        ).use { cur ->
+            return if (cur.moveToFirst()) cur.getString(0) else null
+        }
+    }
+
+    /** 全部注释与文字笔记，按时间倒序 */
+    fun getAllPhotoNotes(): List<PhotoNote> {
+        val list = mutableListOf<PhotoNote>()
+        readableDatabase.query(
+            TABLE_PHOTO_NOTES, null, null, null, null, null, "$COL_PN_CREATED DESC"
+        ).use { cur ->
+            while (cur.moveToNext()) {
+                list.add(
+                    PhotoNote(
+                        id = cur.getLong(cur.getColumnIndexOrThrow(COL_PN_ID)),
+                        fileName = cur.getString(cur.getColumnIndexOrThrow(COL_PN_FILE)),
+                        note = cur.getString(cur.getColumnIndexOrThrow(COL_PN_NOTE)),
+                        createdAt = cur.getString(cur.getColumnIndexOrThrow(COL_PN_CREATED))
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun deletePhotoNote(id: Long): Int =
+        writableDatabase.delete(TABLE_PHOTO_NOTES, "$COL_PN_ID = ?", arrayOf(id.toString()))
+
+    fun deleteNoteByFile(fileName: String): Int =
+        writableDatabase.delete(TABLE_PHOTO_NOTES, "$COL_PN_FILE = ?", arrayOf(fileName))
 }
