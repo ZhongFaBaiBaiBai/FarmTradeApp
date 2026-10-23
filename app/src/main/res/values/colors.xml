@@ -61,4 +61,6 @@
     <color name="chip_stroke">#D8E2D9</color>
     <color name="handle_bar">#E0E6E1</color>
     <color name="scrim">#33000000</color>
+    <!-- 图标背景 -->
+    <color name="launcher_bg">#1B5E20</color>
 </resources>
