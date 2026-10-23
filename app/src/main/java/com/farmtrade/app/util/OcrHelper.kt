@@ -181,6 +181,27 @@ object OcrHelper {
                 scaled2.recycle()
             }
 
+            // ===== Pass 7~10：v2 增强预处理（实测无效，已停用）=====
+            // 真机实测：在 Redmi 2416 上用手写算式图跑，Pass7(Sauvola)/Pass8(去横线) 均无输出，
+            // Pass9(闭运算) 只吐出 "28-气" 这类垃圾，最终仍然识别失败；而处理耗时为原来的 2~3 倍。
+            // 印刷体（过磅单）在第一轮就成功，用不到这些轮次。
+            // 结论：ML Kit 对手写的能力到顶了，加预处理救不回来。函数保留，等换引擎时复用。
+            //
+            // val noShadow = removeShadow(src)
+            // try {
+            //     val sau = sauvolaBinarize(noShadow)
+            //     ... (详见 git 历史)
+            // } finally {
+            //     if (noShadow !== src) noShadow.recycle()
+            // }
+
+            // ===== Pass 11：数字切分逐字识别（暂时停用）=====
+            // 电脑上用 Python 模拟验证发现：真实拍摄背景下（地砖、手、杂乱桌面），
+            // 去阴影 + Sauvola 后仍有上千个噪点连通域，垂直投影会把噪点切成碎片，
+            // 拼接出的字符串可能被误判成算式，产生错误账目。
+            // 等真机上验证 ML Kit 单字识别效果、并把「纸张裁剪」做扎实之后再启用。
+            // recognizeDigitsBySegment(src)?.let { candidates[keyOf(it)] = it }
+
             return dropFragmentRows(candidates.values.toList())
         } finally {
             if (src !== bitmap) src.recycle()
@@ -1017,4 +1038,385 @@ object OcrHelper {
         // Hamming 距离 ≤3 才接受（太差就放弃，避免误读）
         return if (minDist <= 3) best else null
     }
+
+    // ==================== 增强预处理（v2）====================
+
+    /**
+     * 光照归一化：用大窗口局部均值估计背景，前景 = 原图 / 背景。
+     * 手机拍纸张常有阴影，全局阈值会把阴影区整片判成黑。
+     */
+    private fun removeShadow(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w <= 0 || h <= 0) return src
+
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        val gray = IntArray(w * h)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            gray[i] = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+        }
+
+        // 积分图求局部均值（窗口约 1/6 图宽，能覆盖阴影过渡）
+        val stride = w + 1
+        val sum = LongArray((w + 1) * (h + 1))
+        for (y in 0 until h) {
+            var rowSum = 0L
+            for (x in 0 until w) {
+                rowSum += gray[y * w + x].toLong()
+                sum[(y + 1) * stride + (x + 1)] = sum[y * stride + (x + 1)] + rowSum
+            }
+        }
+        val radius = maxOf(8, minOf(w, h) / 6)
+        val out = IntArray(w * h)
+        for (y in 0 until h) {
+            val y0 = maxOf(0, y - radius)
+            val y1 = minOf(h - 1, y + radius)
+            for (x in 0 until w) {
+                val x0 = maxOf(0, x - radius)
+                val x1 = minOf(w - 1, x + radius)
+                val area = ((x1 - x0 + 1) * (y1 - y0 + 1)).toLong()
+                val s = sum[(y1 + 1) * stride + (x1 + 1)] - sum[y0 * stride + (x1 + 1)] -
+                        sum[(y1 + 1) * stride + x0] + sum[y0 * stride + x0]
+                val bg = (s / area).toInt().coerceAtLeast(1)
+                val v = (gray[y * w + x] * 255 / bg).coerceIn(0, 255)
+                out[y * w + x] = Color.rgb(v, v, v)
+            }
+        }
+        val dst = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        dst.setPixels(out, 0, w, 0, 0, w, h)
+        return dst
+    }
+
+    /**
+     * Sauvola 自适应二值化：阈值按局部均值和标准差动态计算。
+     * 比全局 Otsu 更适合光照不均、手写笔画粗细不一的场景。
+     */
+    private fun sauvolaBinarize(src: Bitmap, window: Int = 25, k: Double = 0.2): Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w <= 0 || h <= 0) return src
+
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        val gray = IntArray(w * h)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            gray[i] = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+        }
+
+        val stride = w + 1
+        val sum = DoubleArray((w + 1) * (h + 1))
+        val sqSum = DoubleArray((w + 1) * (h + 1))
+        for (y in 0 until h) {
+            var rowSum = 0.0
+            var rowSq = 0.0
+            for (x in 0 until w) {
+                val v = gray[y * w + x].toDouble()
+                rowSum += v
+                rowSq += v * v
+                sum[(y + 1) * stride + (x + 1)] = sum[y * stride + (x + 1)] + rowSum
+                sqSum[(y + 1) * stride + (x + 1)] = sqSum[y * stride + (x + 1)] + rowSq
+            }
+        }
+
+        val out = IntArray(w * h)
+        val half = maxOf(2, window / 2)
+        val r = 128.0
+        for (y in 0 until h) {
+            val y0 = maxOf(0, y - half)
+            val y1 = minOf(h - 1, y + half)
+            for (x in 0 until w) {
+                val x0 = maxOf(0, x - half)
+                val x1 = minOf(w - 1, x + half)
+                val area = ((x1 - x0 + 1) * (y1 - y0 + 1)).toDouble()
+                val s = sum[(y1 + 1) * stride + (x1 + 1)] - sum[y0 * stride + (x1 + 1)] -
+                        sum[(y1 + 1) * stride + x0] + sum[y0 * stride + x0]
+                val sq = sqSum[(y1 + 1) * stride + (x1 + 1)] - sqSum[y0 * stride + (x1 + 1)] -
+                         sqSum[(y1 + 1) * stride + x0] + sqSum[y0 * stride + x0]
+                val mean = s / area
+                val variance = (sq / area) - mean * mean
+                val std = if (variance > 0) Math.sqrt(variance) else 0.0
+                val threshold = mean * (1.0 + k * (std / r - 1.0))
+                out[y * w + x] =
+                    if (gray[y * w + x] < threshold) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            }
+        }
+        val dst = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        dst.setPixels(out, 0, w, 0, 0, w, h)
+        return dst
+    }
+
+    /**
+     * 擦除记录本上的横线：某一行黑色像素占比超过阈值，判定为横线并清空。
+     * 手写记录本的格子线会被 OCR 当成笔画，严重干扰识别。
+     */
+    private fun removeHorizontalLines(src: Bitmap, ratio: Float = 0.45f): Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w <= 0 || h <= 0) return src
+
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        val isLine = BooleanArray(h)
+        for (y in 0 until h) {
+            var black = 0
+            for (x in 0 until w) {
+                val p = pixels[y * w + x]
+                val g = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+                if (g < 128) black++
+            }
+            isLine[y] = black > (w * ratio)
+        }
+        // 横线常常是 1~3 像素高，做纵向膨胀，避免只擦掉一部分
+        val dilated = BooleanArray(h)
+        for (y in 0 until h) {
+            if (isLine[y]) {
+                for (dy in -1..1) {
+                    val yy = y + dy
+                    if (yy in 0 until h) dilated[yy] = true
+                }
+            }
+        }
+        var changed = false
+        for (y in 0 until h) {
+            if (dilated[y]) {
+                changed = true
+                for (x in 0 until w) pixels[y * w + x] = 0xFFFFFFFF.toInt()
+            }
+        }
+        if (!changed) return src
+
+        val dst = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        dst.setPixels(pixels, 0, w, 0, 0, w, h)
+        return dst
+    }
+
+    /**
+     * 形态学闭运算（先膨胀后腐蚀）：把断开的笔画连起来。
+     * 手写细笔画二值化后容易断，ML Kit 会把它当成两个字符。
+     */
+    private fun morphologyClose(src: Bitmap, radius: Int = 1): Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w <= 0 || h <= 0) return src
+
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        val bin = BooleanArray(w * h)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val g = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+            bin[i] = g < 128
+        }
+
+        // 膨胀
+        val dilated = BooleanArray(w * h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (!bin[y * w + x]) continue
+                for (dy in -radius..radius) {
+                    val yy = y + dy
+                    if (yy !in 0 until h) continue
+                    for (dx in -radius..radius) {
+                        val xx = x + dx
+                        if (xx !in 0 until w) continue
+                        dilated[yy * w + xx] = true
+                    }
+                }
+            }
+        }
+
+        // 腐蚀
+        val closed = BooleanArray(w * h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                var all = true
+                loop@ for (dy in -radius..radius) {
+                    val yy = y + dy
+                    if (yy !in 0 until h) { continue }
+                    for (dx in -radius..radius) {
+                        val xx = x + dx
+                        if (xx !in 0 until w) continue
+                        if (!dilated[yy * w + xx]) { all = false; break@loop }
+                    }
+                }
+                closed[y * w + x] = all
+            }
+        }
+
+        val out = IntArray(w * h)
+        for (i in out.indices) {
+            out[i] = if (closed[i]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+        }
+        val dst = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        dst.setPixels(out, 0, w, 0, 0, w, h)
+        return dst
+    }
+
+
+    // ==================== 数字切分逐字识别（v2）====================
+
+    /**
+     * 按垂直投影把一行内容切分成单字符小块。
+     * 返回 (放大后的字符位图, 起始列, 结束列)，调用方负责 recycle。
+     */
+    private fun segmentDigitBitmaps(src: Bitmap): List<Triple<Bitmap, Int, Int>> {
+        val w = src.width
+        val h = src.height
+        if (w <= 0 || h <= 0) return emptyList()
+
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        val black = BooleanArray(w * h)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val g = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+            black[i] = g < 128
+        }
+
+        // 垂直投影
+        val colCount = IntArray(w)
+        for (x in 0 until w) {
+            var cnt = 0
+            for (y in 0 until h) if (black[y * w + x]) cnt++
+            colCount[x] = cnt
+        }
+
+        // 连续有墨迹的列段
+        val segments = mutableListOf<Pair<Int, Int>>()
+        var start = -1
+        for (x in 0 until w) {
+            if (colCount[x] > 0) {
+                if (start < 0) start = x
+            } else if (start >= 0) {
+                segments.add(start to x - 1)
+                start = -1
+            }
+        }
+        if (start >= 0) segments.add(start to w - 1)
+
+        // 合并太近的段（同一字符被切碎）
+        val gapThr = maxOf(2, w / 60)
+        val merged = mutableListOf<Pair<Int, Int>>()
+        for (seg in segments) {
+            if (merged.isEmpty()) {
+                merged.add(seg)
+            } else {
+                val last = merged.last()
+                if (seg.first - last.second <= gapThr) {
+                    merged[merged.size - 1] = last.first to seg.second
+                } else {
+                    merged.add(seg)
+                }
+            }
+        }
+
+        val result = mutableListOf<Triple<Bitmap, Int, Int>>()
+        for ((s, e) in merged) {
+            val sw = e - s + 1
+            if (sw < 2) continue
+
+            var top = h
+            var bottom = -1
+            for (x in s..e) {
+                for (y in 0 until h) {
+                    if (black[y * w + x]) {
+                        if (y < top) top = y
+                        if (y > bottom) bottom = y
+                    }
+                }
+            }
+            if (bottom < 0) continue
+            val sh = bottom - top + 1
+            if (sh < h * 0.15f) continue  // 太矮，多半是噪点
+
+            val pad = 4
+            val x0 = maxOf(0, s - pad)
+            val x1 = minOf(w - 1, e + pad)
+            val y0 = maxOf(0, top - pad)
+            val y1 = minOf(h - 1, bottom + pad)
+            val cw = x1 - x0 + 1
+            val ch = y1 - y0 + 1
+            if (cw <= 0 || ch <= 0) continue
+
+            val part = Bitmap.createBitmap(src, x0, y0, cw, ch)
+            val scale = maxOf(1f, 72f / ch)
+            val scaled = if (scale > 1.05f) {
+                Bitmap.createScaledBitmap(
+                    part,
+                    (cw * scale).toInt().coerceAtLeast(8),
+                    (ch * scale).toInt().coerceAtLeast(8),
+                    true
+                )
+            } else part
+            if (scaled !== part) part.recycle()
+            result.add(Triple(scaled, s, e))
+        }
+        return result
+    }
+
+    /** 把单个字符的识别结果规整成数字 / 减号 */
+    private fun normalizeDigitChar(raw: String): String {
+        val t = raw.trim().replace("\n", "")
+        if (t.isEmpty()) return ""
+        return when (val ch = t[0]) {
+            'O', 'o', 'D', 'Q', '０' -> "0"
+            'l', 'I', 'i', '|', '!', '１' -> "1"
+            'Z', 'z', '２' -> "2"
+            '３' -> "3"
+            '４' -> "4"
+            'S', 's', '５' -> "5"
+            'b', '６' -> "6"
+            '７' -> "7"
+            'B', '８' -> "8"
+            'g', 'q', '９' -> "9"
+            '一', '−', '–', '—', '－', '_', '~' -> "-"
+            '=', '＝' -> ""
+            in '0'..'9' -> ch.toString()
+            else -> ""
+        }
+    }
+
+    /**
+     * 数字切分识别：把图像切成单字符，逐个送 ML Kit，再拼成算式解析。
+     * 这是整行手写认不出时的最后手段。
+     */
+    private suspend fun recognizeDigitsBySegment(src: Bitmap): LedgerRow? {
+        val noShadow = removeShadow(src)
+        try {
+            val sau = sauvolaBinarize(noShadow)
+            try {
+                val parts = segmentDigitBitmaps(sau)
+                if (parts.size < 4) {
+                    Log.d("OcrHelper", "Pass11 切分不足: ${parts.size} 段")
+                    return null
+                }
+                val sb = StringBuilder()
+                for ((bmp, _, _) in parts) {
+                    val txt = runMlKit(bmp)?.text.orEmpty()
+                    sb.append(normalizeDigitChar(txt))
+                    bmp.recycle()
+                }
+                val joined = sb.toString()
+                Log.d("OcrHelper", "Pass11 切分识别: 段数=${parts.size} 结果=$joined")
+                if (joined.length < 5) return null
+
+                val m = subtractionRegex.find(joined)
+                if (m != null) {
+                    val gross = m.groupValues[1].toDoubleOrNull() ?: return null
+                    val tare = m.groupValues[2].toDoubleOrNull() ?: return null
+                    if (isValidLedgerRow(gross, tare)) return LedgerRow(gross, tare)
+                }
+            } finally {
+                sau.recycle()
+            }
+        } finally {
+            if (noShadow !== src) noShadow.recycle()
+        }
+        return null
+    }
+
 }
