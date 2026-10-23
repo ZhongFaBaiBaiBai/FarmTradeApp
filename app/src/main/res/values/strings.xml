@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">农产品买卖记录</string>
+    <string name="app_name">家庭农场管理</string>
     <string name="tab_records">记录</string>
     <string name="tab_charts">图表</string>
     <string name="tab_summary">汇总</string>
