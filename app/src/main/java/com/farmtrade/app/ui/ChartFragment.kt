@@ -272,10 +272,12 @@ class ChartFragment : Fragment() {
 
     private fun updateOverview(records: List<Record>) {
         binding.tvStatCount.text = records.size.toString()
-        binding.tvStatAmount.text = "￥" + Record.formatMoney(records.sumOf { it.totalAmount })
 
         val buySum = records.filter { it.direction == "买入" }.sumOf { it.totalAmount }
         val sellSum = records.filter { it.direction == "卖出" }.sumOf { it.totalAmount }
+        // 合计 = 卖出 - 买入（净额），不是两者相加
+        val net = sellSum - buySum
+        binding.tvStatAmount.text = "￥" + Record.formatMoney(net)
         binding.tvDirectionSplit.text =
             "买入 ￥" + Record.formatMoney(buySum) + "　·　卖出 ￥" + Record.formatMoney(sellSum)
     }
