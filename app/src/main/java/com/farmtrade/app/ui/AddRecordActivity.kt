@@ -217,13 +217,17 @@ class AddRecordActivity : AppCompatActivity() {
 
     // ==================== 货物类型管理 ====================
 
-    /** 长按类型 chip 弹出的菜单 */
+    /**
+     * 长按类型 chip 弹出的菜单。
+     * 注意：AlertDialog 里 setMessage 和 setItems 同时用会冲突（列表项会被吞掉），
+     * 所以把「使用条数」放进标题，只保留 setItems。
+     */
     private fun showTypeMenu(type: String) {
         val count = dbHelper.countRecordsOfType(type)
+        val title = if (count > 0) "$type（$count 条记录）" else type
         MaterialAlertDialogBuilder(this)
-            .setTitle("货物类型：$type")
-            .setMessage(if (count > 0) "当前有 $count 条记录使用这个类型" else "暂无记录使用这个类型")
-            .setItems(arrayOf("重命名", "删除") ) { _, which ->
+            .setTitle(title)
+            .setItems(arrayOf("重命名", "删除")) { _, which ->
                 when (which) {
                     0 -> showRenameTypeDialog(type)
                     1 -> confirmDeleteType(type, count)
