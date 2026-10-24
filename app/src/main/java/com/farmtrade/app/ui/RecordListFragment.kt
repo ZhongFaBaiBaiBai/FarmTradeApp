@@ -104,7 +104,8 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
 
         // 读取持久化偏好
         sp = requireContext().getSharedPreferences(PREFS_NAME, 0)
-        sortMode = sp.getInt(KEY_SORT, SORT_TIME_DESC)
+        // 排序不再持久化：统一默认「按年份分组」，否则旧偏好会把列表带回类型分组
+        sortMode = SORT_TIME_DESC
         tradeFilter = sp.getInt(KEY_TRADE, TRADE_ALL)
         summaryRange = sp.getInt(KEY_SUMMARY, SUMMARY_TODAY)
 
@@ -137,7 +138,6 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         // 恢复 listener
         setupTradeFilter()
         updateDateFilterChipLabel()
-        updateSummaryRangeUI()
     }
 
     /** 保存偏好：排序/交易方向/汇总范围 */
@@ -273,17 +273,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     }
 
     /** 更新汇总卡片标题和方向标签文字 */
-    private fun updateSummaryRangeUI() {
-        val (title, buyLabel, sellLabel) = when (summaryRange) {
-            SUMMARY_MONTH -> Triple("本月汇总 ▼", "本月买入", "本月卖出")
-            SUMMARY_QUARTER -> Triple("本季汇总 ▼", "本季买入", "本季卖出")
-            SUMMARY_YEAR -> Triple("本年汇总 ▼", "本年买入", "本年卖出")
-            else -> Triple("今日汇总 ▼", "今日买入", "今日卖出")
-        }
-        binding.tvSummaryTitle.text = title
-        binding.tvBuyLabel.text = buyLabel
-        binding.tvSellLabel.text = sellLabel
-    }
+    
 
     /** 日期范围选择对话框 */
     private fun showDateRangeDialog() {
@@ -403,7 +393,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         binding.ivSort.setOnClickListener {
             exitMultiSelectIfActive()
             val modes = arrayOf(
-                "默认（按时间倒序）",
+                "按年份分组（默认）",
                 "类型→单价分组（单价↓）",
                 "类型→单价分组（单价↑）",
                 "日期→类型→单价分组（单价↓）",
