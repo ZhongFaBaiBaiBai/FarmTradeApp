@@ -1,5 +1,7 @@
 package com.farmtrade.app.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
@@ -13,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -57,6 +60,55 @@ class PhotoArchiveFragment : Fragment() {
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) saveImage(uri)
+    }
+
+    /** 正在等待相机回传的文件 */
+    private var pendingPhotoFile: java.io.File? = null
+
+    private val cameraPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) takePhoto() else toast("需要相机权限才能拍照")
+    }
+
+    private val takePicture = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        val f = pendingPhotoFile
+        if (success && f != null && f.exists() && f.length() > 0) {
+            reload()
+            toast("已保存")
+        } else {
+            f?.delete()
+            if (success) toast("拍照失败")
+        }
+        pendingPhotoFile = null
+    }
+
+    /** 点「拍照」：先要权限，再拉起系统相机 */
+    private fun requestCamera() {
+        val granted = ContextCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) takePhoto() else cameraPermission.launch(Manifest.permission.CAMERA)
+    }
+
+    private fun takePhoto() {
+        try {
+            val f = File(dir, "IMG_${System.currentTimeMillis()}.jpg")
+            f.createNewFile()
+            pendingPhotoFile = f
+            val uri = FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                f
+            )
+            takePicture.launch(uri)
+        } catch (e: Exception) {
+            toast("无法启动相机：${e.message ?: "未知错误"}")
+            pendingPhotoFile?.delete()
+            pendingPhotoFile = null
+        }
     }
 
     /** 列表行：图片 或 文字笔记，按时间倒序混排 */
@@ -142,10 +194,11 @@ class PhotoArchiveFragment : Fragment() {
     private fun showAddMenu() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("添加")
-            .setItems(arrayOf("从相册选图片", "写一条文字笔记")) { _, which ->
+            .setItems(arrayOf("拍照", "从相册选图片", "写一条文字笔记")) { _, which ->
                 when (which) {
-                    0 -> pickImage.launch("image/*")
-                    1 -> editNote(null, null)
+                    0 -> requestCamera()
+                    1 -> pickImage.launch("image/*")
+                    2 -> editNote(null, null)
                 }
             }
             .show()
