@@ -69,8 +69,11 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     /** 排序模式 */
     private var sortMode: Int = SORT_TIME_DESC
 
-    /** 从相册选图时，是否走「记录本批量」流程 */
-    private var pickImageForLedger = false
+    /** 年份筛选：null = 全部年份 */
+    private var yearFilter: String? = null
+
+    /** 货物类型筛选：null = 全部类型 */
+    private var typeFilter: String? = null
 
     /** 相册选图：把选中的图片直接交给 QuickRecordActivity 做 OCR */
     private val pickImageLauncher = registerForActivityResult(
@@ -79,10 +82,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         if (uri != null) {
             val intent = Intent(requireContext(), QuickRecordActivity::class.java).apply {
                 putExtra(QuickRecordActivity.EXTRA_IMAGE_URI, uri)
-                putExtra(
-                    EXTRA_RECORD_MODE,
-                    if (pickImageForLedger) QuickRecordActivity.EXTRA_MODE_LEDGER else Record.SOURCE_PHOTO
-                )
+                putExtra(EXTRA_RECORD_MODE, Record.SOURCE_PHOTO)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivityForResult(intent, REQ_QUICK_RECORD)
@@ -111,7 +111,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         setupRecyclerView()
         setupTradeFilter()
         setupDateRangeFilter()
-        setupSummaryRange()
+        setupYearTypeFilter()
         setupFab()
         setupBatchManage()
         setupSearch()
@@ -184,23 +184,75 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         updateDateFilterChipLabel()
     }
 
-    /** 汇总卡片标题：点击弹出范围选择 */
-    private fun setupSummaryRange() {
-        binding.tvSummaryTitle.setOnClickListener {
-            val options = arrayOf("今日汇总 ▼", "本月汇总 ▼", "本季汇总 ▼", "本年汇总 ▼")
-            val values = intArrayOf(SUMMARY_TODAY, SUMMARY_MONTH, SUMMARY_QUARTER, SUMMARY_YEAR)
-            val idx = values.indexOf(summaryRange)
-            AlertDialog.Builder(requireContext())
-                .setTitle("选择汇总范围")
-                .setSingleChoiceItems(arrayOf("今日", "本月", "本季", "本年"), idx) { dialog, which ->
-                    summaryRange = values[which]
-                    savePrefs()
-                    updateSummaryRangeUI()
-                    updateSummary()
-                    dialog.dismiss()
-                }
-                .show()
+    // ==================== 年份 / 类型筛选 ====================
+
+    private fun setupYearTypeFilter() {
+        binding.btnYearFilter.setOnClickListener { showYearFilterDialog() }
+        binding.btnTypeFilter.setOnClickListener { showTypeFilterDialog() }
+        updateYearTypeLabels()
+    }
+
+    private fun updateYearTypeLabels() {
+        binding.btnYearFilter.text = (yearFilter?.let { "${it}年" } ?: "全部年份") + " ▼"
+        binding.btnTypeFilter.text = (typeFilter ?: "全部类型") + " ▼"
+    }
+
+    /** 年份下拉：只列出实际有记录的年份 */
+    private fun showYearFilterDialog() {
+        exitMultiSelectIfActive()
+        val years = allRecords
+            .map { it.dateTime.take(4) }
+            .filter { y -> y.length == 4 && y.all { it.isDigit() } }
+            .distinct()
+            .sortedDescending()
+        if (years.isEmpty()) {
+            Toast.makeText(requireContext(), "还没有任何记录", Toast.LENGTH_SHORT).show()
+            return
         }
+        val options = mutableListOf("全部年份")
+        options.addAll(years.map { "${it}年" })
+        val current = if (yearFilter == null) 0 else years.indexOf(yearFilter) + 1
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("选择年份")
+            .setSingleChoiceItems(options.toTypedArray(), current) { dialog, which ->
+                yearFilter = if (which == 0) null else years[which - 1]
+                updateYearTypeLabels()
+                applyFilter()
+                savePrefs()
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 货物类型下拉：只列出实际出现过的类型 */
+    private fun showTypeFilterDialog() {
+        exitMultiSelectIfActive()
+        val types = allRecords
+            .map { it.type }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+        if (types.isEmpty()) {
+            Toast.makeText(requireContext(), "还没有任何记录", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val options = mutableListOf("全部类型")
+        options.addAll(types)
+        val current = if (typeFilter == null) 0 else types.indexOf(typeFilter) + 1
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("选择货物类型")
+            .setSingleChoiceItems(options.toTypedArray(), current) { dialog, which ->
+                typeFilter = if (which == 0) null else types[which - 1]
+                updateYearTypeLabels()
+                applyFilter()
+                savePrefs()
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     /** 更新日期筛选 chip 的文字（显示当前状态） */
@@ -449,8 +501,7 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
      */
     fun loadRecords() {
         allRecords = databaseHelper.getAllRecords()
-        applyFilter()
-        updateSummary()
+        applyFilter()   // 内部会刷新汇总卡
     }
 
     private fun applyFilter() {
@@ -459,6 +510,14 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
             TRADE_BUY -> allRecords.filter { it.direction == "买入" }
             TRADE_SELL -> allRecords.filter { it.direction == "卖出" }
             else -> allRecords
+        }
+        // 年份筛选
+        yearFilter?.let { y ->
+            filtered = filtered.filter { it.dateTime.startsWith(y) }
+        }
+        // 货物类型筛选
+        typeFilter?.let { t ->
+            filtered = filtered.filter { it.type == t }
         }
         // 日期范围筛选
         filtered = filtered.filter { record -> isInDateRange(record.dateTime) }
@@ -475,12 +534,10 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
             SORT_TYPE_PRICE_ASC -> adapter.updateGroupedByType(filtered, priceDesc = false)
             SORT_DATE_TYPE_PRICE_DESC -> adapter.updateGroupedByDate(filtered, priceDesc = true)
             SORT_DATE_TYPE_PRICE_ASC -> adapter.updateGroupedByDate(filtered, priceDesc = false)
-            else -> {
-                // 默认时间倒序
-                val sorted = filtered.sortedByDescending { it.dateTime }
-                adapter.updateFlat(sorted)
-            }
+            // 默认：按年份分组，年份头可折叠
+            else -> adapter.updateGroupedByYear(filtered)
         }
+        updateSummary(filtered)
     }
 
     /** 判断 dateTime (yyyy-MM-dd HH:mm:ss) 是否在当前日期范围内 */
@@ -492,13 +549,8 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
     }
 
     /** 汇总卡片：按 summaryRange 计算买入/卖出/净额 */
-    private fun updateSummary() {
-        val (start, end) = getSummaryRangeBounds(summaryRange)
-        val records = allRecords.filter { record ->
-            val datePart = record.dateTime.substringBefore(' ')
-            datePart >= start && datePart <= end
-        }
-
+    /** 汇总卡：直接统计当前筛选后的记录 */
+    private fun updateSummary(records: List<Record>) {
         var buyTotal = 0.0
         var sellTotal = 0.0
         records.forEach { r ->
@@ -570,10 +622,6 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
             dialog.dismiss()
             startQuickRecord(Record.SOURCE_PHOTO)
         }
-        sheetBinding.btnLedgerRecord.setOnClickListener {
-            dialog.dismiss()
-            startQuickRecord(QuickRecordActivity.EXTRA_MODE_LEDGER)
-        }
         sheetBinding.btnManualBatch.setOnClickListener {
             dialog.dismiss()
             // 手动批量：直接跳转 LedgerReviewActivity，不传 JSON 即为手动模式
@@ -589,12 +637,6 @@ class RecordListFragment : Fragment(), RecordAdapter.OnRecordClickListener {
         }
         sheetBinding.btnPickPhoto.setOnClickListener {
             dialog.dismiss()
-            pickImageForLedger = false
-            pickImageLauncher.launch("image/*")
-        }
-        sheetBinding.btnPickLedger.setOnClickListener {
-            dialog.dismiss()
-            pickImageForLedger = true
             pickImageLauncher.launch("image/*")
         }
         sheetBinding.btnCancel.setOnClickListener { dialog.dismiss() }
