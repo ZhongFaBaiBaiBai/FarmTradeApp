@@ -33,7 +33,7 @@ import java.util.Locale
 /**
  * 快速记录界面：通过拍照自动生成一条记录，并沿用今日上一条记录的车重/单价等。
  *
- * - 接收 [EXTRA_RECORD_MODE] = "PHOTO" / "LEDGER"
+ * - 接收 [EXTRA_RECORD_MODE] = "PHOTO"
  * - PHOTO：立即拍照 -> OCR 读取数字作为总重
  * - 读取 [DatabaseHelper.getTodayLastRecord] 进行沿用
  * - 展示自动生成记录卡片，每个字段带来源徽标，可点击行内编辑
@@ -45,7 +45,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private val dbHelper by lazy { DatabaseHelper(this) }
 
     /**
-     * 录入模式：PHOTO（拍照）或 LEDGER（记录本批量）。
+     * 录入模式：PHOTO（拍照识别过磅单）。
      * 注意：通过键 [EXTRA_RECORD_MODE] 传入。
      */
     private val mode: String by lazy {
@@ -157,10 +157,7 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
             cameraForInitial = true
             runOcr(incomingUri)
         } else {
-            when (mode) {
-                EXTRA_MODE_LEDGER -> startLedgerFlow()
-                else -> startPhotoFlow()
-            }
+            startPhotoFlow()
         }
     }
 
@@ -169,12 +166,6 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
     private fun startPhotoFlow() {
         cameraForInitial = true
         if (hasCameraPermission()) launchCamera() else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-    }
-
-    /** 记录本批量模式：直接进入拍照流程，OCR 后跳转批量确认页 */
-    private fun startLedgerFlow() {
-        binding.tvCarryOverInfo.text = "请拍整本记录本，将自动识别每行「总重-车重」..."
-        startPhotoFlow()
     }
 
     private fun assembleRecord(grossFromInput: Double) {
@@ -215,25 +206,6 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         renderRecord()
         showCarryOverBanner()
     }
-
-    private fun handleOcrResult(value: Double) {
-        if (cameraForInitial) {
-            cameraForInitial = false
-            assembleRecord(grossFromInput = value)
-            showToast("识别到总重：${Record.formatNumber(value)}")
-        } else {
-            when (cameraTarget) {
-                EditField.GROSS -> _pendingRecord.grossWeight = value
-                EditField.TARE -> _pendingRecord.vehicleWeight = value
-                EditField.PRICE -> _pendingRecord.unitPrice = value
-                else -> {}
-            }
-            doRecalcAndRender()
-            showToast("识别到${fieldLabel(cameraTarget)}：${Record.formatNumber(value)}")
-        }
-    }
-
-    // ==================== 渲染 ====================
 
     private fun doRecalcAndRender() {
         if (!this::_pendingRecord.isInitialized) return
@@ -493,13 +465,6 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                 bitmap = withContext(Dispatchers.IO) {
                     OcrHelper.loadBitmap(this@QuickRecordActivity, uri)
                 }
-                if (mode == EXTRA_MODE_LEDGER) {
-                    val rows = if (bitmap != null) {
-                        withContext(Dispatchers.Default) { OcrHelper.recognizeLedgerRows(bitmap) }
-                    } else emptyList()
-                    handleLedgerRows(rows)
-                    return@launch
-                }
                 // 1) 优先尝试过磅单多字段识别（毛重/皮重/单价/类型/时间）
                 val slip = if (bitmap != null) {
                     withContext(Dispatchers.Default) { OcrHelper.recognizeWeighingSlip(bitmap) }
@@ -513,24 +478,12 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
                     }
                     return@launch
                 }
-                // 2) fallback：单数字识别（地磅屏等场景）
-                val number = if (bitmap != null) {
-                    withContext(Dispatchers.Default) { OcrHelper.recognizeFromBitmap(bitmap) }
-                } else null
-                if (number != null) {
-                    val value = number.toDoubleOrNull()
-                    if (value != null && value > 0) {
-                        handleOcrResult(value)
-                    } else {
-                        showOcrFailureDialog()
-                    }
-                } else {
-                    showOcrFailureDialog()
-                }
+                // 2) 没识别到过磅单结构 → 提示重拍
+                showOcrFailureDialog()
             } catch (e: Throwable) {
                 // OOM 等异常不再闪退，给出重试入口
                 Log.e("QuickRecord", "拍照识别失败", e)
-                if (mode == EXTRA_MODE_LEDGER) handleLedgerRows(emptyList()) else showOcrFailureDialog()
+                showOcrFailureDialog()
             } finally {
                 // 识别函数内部只回收各自的降采样副本，原图由调用方统一回收
                 bitmap?.recycle()
@@ -593,35 +546,6 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         showToast("识别到过磅单字段")
     }
 
-    /** 记录本批量：OCR 结果在主线程分发 —— 空结果给重拍对话框，有结果跳转批量确认页 */
-    private fun handleLedgerRows(rows: List<OcrHelper.LedgerRow>) {
-        if (rows.isEmpty()) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("未能识别算式")
-                .setMessage("没有识别到「总重-车重」算式。\n\n建议：本子占画面一半以上、正对拍摄、对焦清晰，字写大一些。\n也可以改为手动逐条录入。")
-                .setPositiveButton("重新拍照") { _, _ ->
-                    cameraForInitial = true
-                    if (hasCameraPermission()) launchCamera()
-                    else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                }
-                .setNegativeButton("手动录入") { _, _ ->
-                    // 不传 JSON 打开批量确认页 = 手动逐条添加模式
-                    editRecordLauncher.launch(Intent(this, LedgerReviewActivity::class.java))
-                }
-                .setNeutralButton("返回") { _, _ -> finish() }
-                .setCancelable(false)
-                .show()
-            return
-        }
-        val arr = org.json.JSONArray()
-        rows.forEach { row ->
-            arr.put(org.json.JSONObject().put("g", row.gross).put("t", row.tare))
-        }
-        val intent = Intent(this, LedgerReviewActivity::class.java)
-            .putExtra(LedgerReviewActivity.EXTRA_ROWS_JSON, arr.toString())
-        editRecordLauncher.launch(intent)
-    }
-
     // ==================== 保存 / 跳转 ====================
 
     private fun goToFullEdit() {
@@ -669,8 +593,6 @@ class QuickRecordActivity : AppCompatActivity(), QuickRecordEditDialogs.Host {
         // 录入模式值，与 Record.SOURCE_PHOTO / Record.SOURCE_VOICE 一致
         const val EXTRA_RECORD_MODE = "extra_record_mode"
         const val EXTRA_MODE_PHOTO = "PHOTO"
-        /** 拍整本记录本批量录入：拍照 -> OCR 所有"总重-车重"算式 -> LedgerReviewActivity */
-        const val EXTRA_MODE_LEDGER = "LEDGER"
         /** 直接传入一张图片（相册选择），跳过相机 */
         const val EXTRA_IMAGE_URI = "extra_image_uri"
     }
