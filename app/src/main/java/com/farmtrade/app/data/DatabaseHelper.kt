@@ -224,6 +224,41 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
         return result > 0
     }
 
+    /**
+     * 重命名货物类型：同时把历史记录里的类型名一起改掉，保证数据一致。
+     * @return true 表示成功；false 表示重命名失败（通常是新名字已存在）
+     */
+    fun renameType(oldName: String, newName: String): Boolean {
+        val old = oldName.trim()
+        val name = newName.trim()
+        if (old.isEmpty() || name.isEmpty() || old == name) return false
+
+        val database = writableDatabase
+        // 新名字已存在就不让改
+        database.query(
+            TABLE_CUSTOM_TYPES, arrayOf(COL_TYPE_NAME),
+            "$COL_TYPE_NAME = ?", arrayOf(name), null, null, null
+        ).use { if (it.moveToFirst()) return false }
+
+        val cv = ContentValues().apply { put(COL_TYPE_NAME, name) }
+        val updated = database.update(
+            TABLE_CUSTOM_TYPES, cv, "$COL_TYPE_NAME = ?", arrayOf(old)
+        )
+        if (updated <= 0) return false
+
+        // 历史记录里的类型名同步更新
+        val rcv = ContentValues().apply { put(COL_TYPE, name) }
+        database.update(TABLE_RECORDS, rcv, "$COL_TYPE = ?", arrayOf(old))
+        return true
+    }
+
+    /** 该类型下有多少条记录（删除前提示用） */
+    fun countRecordsOfType(typeName: String): Int {
+        readableDatabase.query(
+            TABLE_RECORDS, arrayOf(COL_ID), "$COL_TYPE = ?", arrayOf(typeName), null, null, null
+        ).use { return it.count }
+    }
+
     fun deleteCustomType(typeName: String) {
         writableDatabase.delete(TABLE_CUSTOM_TYPES, "$COL_TYPE_NAME = ?", arrayOf(typeName))
     }
