@@ -30,6 +30,8 @@ class RecordAdapter(
     // ==================== 数据模型 ====================
 
     sealed class ListItem {
+        /** 年份分组头（最外层，可折叠） */
+        data class YearHeader(val year: String, val count: Int, val subtotal: Double) : ListItem()
         /** 日期分组头（最外层，不可折叠） */
         data class DateHeader(val date: String, val count: Int, val subtotal: Double) : ListItem()
         /** 类型分组头（不可折叠，永远展开） */
@@ -85,6 +87,7 @@ class RecordAdapter(
 
     override fun getItemViewType(position: Int): Int {
         return when (flatList[position]) {
+            is ListItem.YearHeader -> DATE_HEADER   // 年份头复用分组头布局
             is ListItem.DateHeader -> DATE_HEADER
             is ListItem.TypeHeader -> TYPE_HEADER
             is ListItem.PriceHeader -> PRICE_HEADER
@@ -117,6 +120,23 @@ class RecordAdapter(
         val b = holder.binding
         val ctx = b.root.context
         when (item) {
+            is ListItem.YearHeader -> {
+                val key = "YEAR:${item.year}"
+                val collapsed = isCollapsed(key)
+                b.tvGroupName.text = "${item.year}年"
+                b.tvGroupName.textSize = 21f
+                b.tvGroupName.setTextColor(0xFF1B5E20.toInt())
+                b.tvCount.text = "${item.count}条"
+                b.tvCount.textSize = 14f
+                b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
+                b.tvSubtotal.textSize = 19f
+                b.tvSubtotal.setTextColor(0xFF1B5E20.toInt())
+                b.root.background = roundedBg(ctx, 0xFFE8F5E9.toInt())
+                b.ivArrow.visibility = View.VISIBLE
+                b.ivArrow.text = if (collapsed) "▶" else "▼"
+                b.root.setPadding(16, 18, 16, 16)
+                b.root.setOnClickListener { toggleCollapse(key) }
+            }
             is ListItem.DateHeader -> {
                 // ===== 日期头：最外层，最大最醒目 =====
                 b.tvGroupName.text = item.date
@@ -210,6 +230,33 @@ class RecordAdapter(
     }
 
     /** 两级分组：类型 → 单价 */
+    /** 按年份分组（年份头可折叠） */
+    fun updateGroupedByYear(newRecords: List<Record>) {
+        if (multiSelectMode) { multiSelectMode = false; selectedIds.clear() }
+        groupedMode = true
+        flatRecords.clear(); flatRecords.addAll(newRecords)
+        rebuildByYear()
+        notifyDataSetChanged()
+    }
+
+    /** 年份分组的具体构建 */
+    private fun rebuildByYear() {
+        flatList.clear()
+        flatRecords
+            .groupBy { it.dateTime.take(4) }
+            .toList()
+            .sortedByDescending { it.first }
+            .forEach { (year, yearRecords) ->
+                val sorted = yearRecords.sortedByDescending { it.dateTime }
+                flatList.add(
+                    ListItem.YearHeader(year, sorted.size, sorted.sumOf { it.totalAmount })
+                )
+                if (!isCollapsed("YEAR:$year")) {
+                    sorted.forEach { flatList.add(ListItem.RecordItem(it)) }
+                }
+            }
+    }
+
     fun updateGroupedByType(newRecords: List<Record>, priceDesc: Boolean = true) {
         if (multiSelectMode) { multiSelectMode = false; selectedIds.clear() }
         groupedMode = true
@@ -304,6 +351,7 @@ class RecordAdapter(
     private fun rebuildFromState(priceDesc: Boolean) {
         if (flatList.isEmpty()) return
         when (flatList[0]) {
+            is ListItem.YearHeader -> rebuildByYear()
             is ListItem.DateHeader -> rebuildThreeLevel(priceDesc)
             is ListItem.TypeHeader -> rebuildTwoLevel(priceDesc)
             else -> {} // 平铺模式不会触发折叠
