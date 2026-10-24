@@ -18,7 +18,6 @@ import com.farmtrade.app.data.DatabaseHelper
 import com.farmtrade.app.data.Record
 import com.farmtrade.app.databinding.ActivityAddRecordBinding
 import com.farmtrade.app.databinding.DialogCustomTypeBinding
-import com.farmtrade.app.util.OcrHelper
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +35,7 @@ import java.util.Locale
  * - 买卖方向 买入/卖出 切换
  * - 类型 chips（来自 [DatabaseHelper.getAllTypes]） + "+ 自定义"
  * - 计量方式：按重量(公斤) / 按重量(斤) / 按数量
- * - 重量区：总重 / 车重（可拍照 OCR 识别） / 净重自动计算
+ * - 重量区：总重 / 车重 / 净重自动计算
  * - 单价 + 合计金额自动预览
  * - 保存：新增或更新记录
  * - 编辑模式：通过 [EXTRA_RECORD] 或 [EXTRA_RECORD_ID] 传入记录并预填
@@ -52,10 +51,6 @@ class AddRecordActivity : AppCompatActivity() {
     private var selectedType = ""
     private var measureMode = Record.MODE_WEIGHT_KG
 
-    /** 0 = 总重, 1 = 车重 —— 标记当前拍照识别的目标输入框 */
-    private var currentPhotoTarget = 0
-    private var cameraImageUri: Uri? = null
-
     private val dateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
     /** 监听重量/数量/单价变化，实时刷新净重与合计 */
@@ -64,21 +59,6 @@ class AddRecordActivity : AppCompatActivity() {
         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         override fun afterTextChanged(s: Editable?) = recalcNetAndTotal()
     }
-
-    private val cameraPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) launchCamera() else toast("需要相机权限才能拍照识别")
-        }
-
-    private val takePictureLauncher =
-        registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-            val uri = cameraImageUri
-            if (success && uri != null) {
-                runOcr(uri)
-            } else {
-                toast("未拍摄照片")
-            }
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -147,9 +127,6 @@ class AddRecordActivity : AppCompatActivity() {
         })
 
         // 6. 拍照识别
-        binding.btnPhotoGross.setOnClickListener { requestCameraFor(0) }      // 单字段：总重
-        binding.btnPhotoTare.setOnClickListener { requestCameraFor(1) }     // 单字段：车重
-
         // 7. 保存
         binding.btnSave.setOnClickListener { saveRecord() }
 
@@ -196,6 +173,11 @@ class AddRecordActivity : AppCompatActivity() {
                 isClickable = true
                 textSize = 15f
                 id = View.generateViewId()
+                // 长按类型 → 重命名 / 删除
+                setOnLongClickListener {
+                    showTypeMenu(type)
+                    true
+                }
             }
             binding.chipGroupType.addView(chip)
             if (type == target) chipToSelect = chip
@@ -214,6 +196,7 @@ class AddRecordActivity : AppCompatActivity() {
 
     private fun showCustomTypeDialog() {
         val dv = DialogCustomTypeBinding.inflate(layoutInflater)
+        dv.tvDialogTitle.text = "新建货物类型"
         val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
         dv.btnAdd.setOnClickListener {
             val name = dv.etTypeName.text?.toString().orEmpty().trim()
@@ -230,6 +213,67 @@ class AddRecordActivity : AppCompatActivity() {
             }
         }
         dialog.show()
+    }
+
+    // ==================== 货物类型管理 ====================
+
+    /** 长按类型 chip 弹出的菜单 */
+    private fun showTypeMenu(type: String) {
+        val count = dbHelper.countRecordsOfType(type)
+        MaterialAlertDialogBuilder(this)
+            .setTitle("货物类型：$type")
+            .setMessage(if (count > 0) "当前有 $count 条记录使用这个类型" else "暂无记录使用这个类型")
+            .setItems(arrayOf("重命名", "删除") ) { _, which ->
+                when (which) {
+                    0 -> showRenameTypeDialog(type)
+                    1 -> confirmDeleteType(type, count)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 重命名：同时更新历史记录里的类型名 */
+    private fun showRenameTypeDialog(oldName: String) {
+        val dv = DialogCustomTypeBinding.inflate(layoutInflater)
+        dv.tvDialogTitle.text = "重命名类型"
+        dv.etTypeName.setText(oldName)
+        dv.etTypeName.setSelection(dv.etTypeName.text?.length ?: 0)
+        dv.btnAdd.text = "保存"
+
+        val dialog = MaterialAlertDialogBuilder(this).setView(dv.root).create()
+        dv.btnAdd.setOnClickListener {
+            val name = dv.etTypeName.text?.toString().orEmpty().trim()
+            if (name.isBlank()) { toast("请输入类型名称"); return@setOnClickListener }
+            if (name == oldName) { dialog.dismiss(); return@setOnClickListener }
+            if (dbHelper.renameType(oldName, name)) {
+                buildTypeChips(name)
+                toast("已重命名为：$name")
+                dialog.dismiss()
+            } else {
+                toast("重命名失败：该类型可能已存在")
+            }
+        }
+        dialog.show()
+    }
+
+    /** 删除类型（历史记录保留原类型名） */
+    private fun confirmDeleteType(type: String, count: Int) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("删除类型")
+            .setMessage(
+                if (count > 0)
+                    "确定删除「$type」吗？\n\n已有 $count 条记录仍保留这个类型名，不会丢失；只是以后新建记录时不再出现该选项。"
+                else
+                    "确定删除「$type」吗？"
+            )
+            .setPositiveButton("删除") { _, _ ->
+                dbHelper.deleteCustomType(type)
+                buildTypeChips()
+                toast("已删除：$type")
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     // ==================== 计量方式 ====================
@@ -272,65 +316,6 @@ class AddRecordActivity : AppCompatActivity() {
                 net * price
             }
             binding.tvTotalPreview.text = "￥${Record.formatMoney(total)}"
-        }
-    }
-
-    // ==================== 拍照 OCR ====================
-
-    private fun requestCameraFor(target: Int) {
-        currentPhotoTarget = target
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            launchCamera()
-        } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    private fun launchCamera() {
-        cameraImageUri = OcrHelper.createImageUri(this)
-        if (cameraImageUri == null) {
-            toast("无法创建图片文件")
-            return
-        }
-        try {
-            takePictureLauncher.launch(cameraImageUri!!)
-        } catch (e: Exception) {
-            toast("无法启动相机")
-        }
-    }
-
-    private fun runOcr(uri: Uri) {
-        lifecycleScope.launch {
-            var bitmap: android.graphics.Bitmap? = null
-            try {
-                bitmap = withContext(Dispatchers.IO) {
-                    OcrHelper.loadBitmap(this@AddRecordActivity, uri)
-                } ?: run {
-                    toast("OCR 加载图片失败")
-                    return@launch
-                }
-
-                // 单字段模式：一次识别一个数（拍总重 / 拍车重各拍一张）；像素处理放后台线程
-                val number = withContext(Dispatchers.Default) {
-                    OcrHelper.recognizeFromBitmap(bitmap)
-                }
-                if (number != null && number.toDoubleOrNull()?.let { it > 0.0 } == true) {
-                    if (currentPhotoTarget == 0) binding.etGrossWeight.setText(number)
-                    else binding.etTareWeight.setText(number)
-                    toast("识别到：$number")
-                } else {
-                    toast("未识别到有效数字")
-                }
-                recalcNetAndTotal()
-            } catch (e: Throwable) {
-                // OOM 等异常不闪退
-                Log.e("AddRecord", "拍照识别失败", e)
-                toast("识别失败，请重拍或手动输入")
-            } finally {
-                bitmap?.recycle()
-            }
         }
     }
 
