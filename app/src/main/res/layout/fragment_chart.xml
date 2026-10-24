@@ -263,7 +263,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="合计金额"
+                                android:text="净额（卖出−买入）"
                                 android:textColor="@color/text_secondary"
                                 android:textSize="12sp"
                                 android:layout_marginTop="4dp" />
