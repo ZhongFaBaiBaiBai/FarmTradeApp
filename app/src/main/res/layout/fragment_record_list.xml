@@ -188,6 +188,47 @@
             </com.google.android.material.chip.ChipGroup>
         </HorizontalScrollView>
 
+        <!-- ============ 年份 / 类型 筛选 ============ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@color/bg_page"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:id="@+id/btnYearFilter"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:text="全部年份 ▼"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/btnTypeFilter"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:text="全部类型 ▼"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
         <!-- ============ 汇总卡 ============ -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -206,7 +247,7 @@
                 android:id="@+id/tvSummaryTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="今日汇总 ▼"
+                android:text="筛选结果汇总"
                 android:textColor="@color/white"
                 android:textSize="14sp"
                 android:textStyle="bold"
