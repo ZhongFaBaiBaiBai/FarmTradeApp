@@ -52,7 +52,7 @@ class PhotoArchiveFragment : Fragment() {
     private lateinit var db: DatabaseHelper
     private lateinit var adapter: ArchiveAdapter
 
-    private val shortFmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+    private val shortFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     private val fullFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
