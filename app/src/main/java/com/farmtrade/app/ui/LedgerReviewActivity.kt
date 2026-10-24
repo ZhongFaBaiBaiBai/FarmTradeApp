@@ -22,8 +22,8 @@ import java.util.Locale
 
 /**
  * 批量录入确认页（拍照 OCR + 手动批量共用）：
- * - 拍照模式：接收 [EXTRA_ROWS_JSON]（OCR 出的"总重-车重"算式列表）预填各行
- * - 手动模式：不传 JSON，页面初始空，用户点"+ 添加一行"逐条录入
+ * - 手动模式：页面初始空，用户点"+ 添加一行"逐条录入
+ * - 兼容：若通过 [EXTRA_ROWS_JSON] 传入算式 JSON，会预填各行（OCR 已移除，此入口当前不再使用）
  * - 整批统一设置 方向 / 类型 / 单位 / 单价
  * - 每行可修改总重、车重（净重自动重算），可删除
  * - 一键批量保存，日期时间按行序每条递增 1 分钟
@@ -37,6 +37,9 @@ class LedgerReviewActivity : AppCompatActivity() {
     private var measureMode = Record.MODE_WEIGHT_KG
     private val dateTimeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     private var batchDateTime: String = dateTimeFmt.format(Date())
+
+    /** 一行算式数据（总重 / 车重），仅用于本页内部传递 */
+    private data class RowData(val gross: Double, val tare: Double)
 
     /** 行视图持有者，保存时按顺序读取输入框内容 */
     private class RowHolder(
@@ -95,28 +98,28 @@ class LedgerReviewActivity : AppCompatActivity() {
 
         rows.forEach { addRowView(it) }
         // 手动模式：初始没数据时自动加一行空行，方便用户直接开始填
-        if (rows.isEmpty()) addRowView(OcrHelper.LedgerRow(0.0, 0.0))
+        if (rows.isEmpty()) addRowView(RowData(0.0, 0.0))
         // "+ 添加一行"按钮
-        binding.btnAddRow.setOnClickListener { addRowView(OcrHelper.LedgerRow(0.0, 0.0)) }
+        binding.btnAddRow.setOnClickListener { addRowView(RowData(0.0, 0.0)) }
         updateSummary()
 
         binding.btnSaveAll.setOnClickListener { saveAll() }
     }
 
-    private fun parseRows(json: String): List<OcrHelper.LedgerRow> = try {
+    private fun parseRows(json: String): List<RowData> = try {
         val arr = JSONArray(json)
         (0 until arr.length()).mapNotNull { i ->
             val o: JSONObject = arr.getJSONObject(i)
             val g = o.optDouble("g", 0.0)
             val t = o.optDouble("t", 0.0)
-            if (g > 0) OcrHelper.LedgerRow(g, t) else null
+            if (g > 0) RowData(g, t) else null
         }
     } catch (_: Exception) {
         emptyList()
     }
 
     /** 添加一行可编辑的算式（总重 − 车重 = 净重），净重随输入自动重算 */
-    private fun addRowView(row: OcrHelper.LedgerRow) {
+    private fun addRowView(row: RowData) {
         val item = ItemLedgerRowBinding.inflate(LayoutInflater.from(this))
         if (row.gross > 0) item.etRowGross.setText(Record.formatNumber(row.gross))
         if (row.tare > 0) item.etRowTare.setText(Record.formatNumber(row.tare))
