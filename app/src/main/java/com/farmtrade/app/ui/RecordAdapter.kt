@@ -30,8 +30,10 @@ class RecordAdapter(
     // ==================== 数据模型 ====================
 
     sealed class ListItem {
-        /** 年份分组头（最外层，可折叠） */
-        data class YearHeader(val year: String, val count: Int, val subtotal: Double) : ListItem()
+        /** 年份分组头（可折叠） */
+        data class YearHeader(val year: String, val count: Int, val net: Double) : ListItem()
+        /** 月份分组头（年份下二级，可折叠） */
+        data class MonthHeader(val year: String, val month: String, val count: Int, val net: Double) : ListItem()
         /** 日期分组头（最外层，不可折叠） */
         data class DateHeader(val date: String, val count: Int, val subtotal: Double) : ListItem()
         /** 类型分组头（不可折叠，永远展开） */
@@ -87,7 +89,8 @@ class RecordAdapter(
 
     override fun getItemViewType(position: Int): Int {
         return when (flatList[position]) {
-            is ListItem.YearHeader -> DATE_HEADER   // 年份头复用分组头布局
+            is ListItem.YearHeader -> DATE_HEADER    // 年份头复用分组头布局
+            is ListItem.MonthHeader -> DATE_HEADER   // 月份头复用分组头布局
             is ListItem.DateHeader -> DATE_HEADER
             is ListItem.TypeHeader -> TYPE_HEADER
             is ListItem.PriceHeader -> PRICE_HEADER
@@ -128,13 +131,30 @@ class RecordAdapter(
                 b.tvGroupName.setTextColor(0xFF1B5E20.toInt())
                 b.tvCount.text = "${item.count}条"
                 b.tvCount.textSize = 14f
-                b.tvSubtotal.text = "￥${Record.formatMoney(item.subtotal)}"
-                b.tvSubtotal.textSize = 19f
-                b.tvSubtotal.setTextColor(0xFF1B5E20.toInt())
+                b.tvSubtotal.text = "净 ￥${Record.formatMoney(item.net)}"
+                b.tvSubtotal.textSize = 18f
+                b.tvSubtotal.setTextColor(if (item.net >= 0) 0xFF1B5E20.toInt() else 0xFFC62828.toInt())
                 b.root.background = roundedBg(ctx, 0xFFE8F5E9.toInt())
                 b.ivArrow.visibility = View.VISIBLE
                 b.ivArrow.text = if (collapsed) "▶" else "▼"
                 b.root.setPadding(16, 18, 16, 16)
+                b.root.setOnClickListener { toggleCollapse(key) }
+            }
+            is ListItem.MonthHeader -> {
+                val key = "MONTH:${item.year}-${item.month}"
+                val collapsed = isCollapsed(key)
+                b.tvGroupName.text = "${item.month.trimStart('0')}月"
+                b.tvGroupName.textSize = 17f
+                b.tvGroupName.setTextColor(0xFF2E7D32.toInt())
+                b.tvCount.text = "${item.count}条"
+                b.tvCount.textSize = 13f
+                b.tvSubtotal.text = "净 ￥${Record.formatMoney(item.net)}"
+                b.tvSubtotal.textSize = 15f
+                b.tvSubtotal.setTextColor(if (item.net >= 0) 0xFF2E7D32.toInt() else 0xFFC62828.toInt())
+                b.root.background = roundedBg(ctx, 0xFFF1F8E9.toInt())
+                b.ivArrow.visibility = View.VISIBLE
+                b.ivArrow.text = if (collapsed) "▶" else "▼"
+                b.root.setPadding(32, 12, 16, 12)
                 b.root.setOnClickListener { toggleCollapse(key) }
             }
             is ListItem.DateHeader -> {
@@ -239,7 +259,11 @@ class RecordAdapter(
         notifyDataSetChanged()
     }
 
-    /** 年份分组的具体构建 */
+    /** 净额 = 卖出 - 买入 */
+    private fun netOf(records: List<Record>): Double =
+        records.sumOf { if (it.direction == "卖出") it.totalAmount else -it.totalAmount }
+
+    /** 年份 → 月份 两级分组，两级都可折叠 */
     private fun rebuildByYear() {
         flatList.clear()
         flatRecords
@@ -247,13 +271,22 @@ class RecordAdapter(
             .toList()
             .sortedByDescending { it.first }
             .forEach { (year, yearRecords) ->
-                val sorted = yearRecords.sortedByDescending { it.dateTime }
-                flatList.add(
-                    ListItem.YearHeader(year, sorted.size, sorted.sumOf { it.totalAmount })
-                )
-                if (!isCollapsed("YEAR:$year")) {
-                    sorted.forEach { flatList.add(ListItem.RecordItem(it)) }
-                }
+                flatList.add(ListItem.YearHeader(year, yearRecords.size, netOf(yearRecords)))
+                if (isCollapsed("YEAR:$year")) return@forEach
+
+                yearRecords
+                    .groupBy { it.dateTime.substring(5, 7) }   // MM
+                    .toList()
+                    .sortedByDescending { it.first }
+                    .forEach { (month, monthRecords) ->
+                        val sorted = monthRecords.sortedByDescending { it.dateTime }
+                        flatList.add(
+                            ListItem.MonthHeader(year, month, sorted.size, netOf(sorted))
+                        )
+                        if (!isCollapsed("MONTH:$year-$month")) {
+                            sorted.forEach { flatList.add(ListItem.RecordItem(it)) }
+                        }
+                    }
             }
     }
 
